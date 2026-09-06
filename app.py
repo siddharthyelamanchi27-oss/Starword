@@ -1,0 +1,1170 @@
+import streamlit as st
+import random
+import json
+import requests
+
+st.set_page_config(page_title="STARWORD: FIVE EXPLORERS", page_icon="⭐", layout="centered")
+
+GEMINI_MODEL = "gemini-flash-latest"
+GEMINI_URL = f"https://generativelanguage.googleapis.com/v1beta/models/{GEMINI_MODEL}:generateContent"
+
+# ----------------------------------------------------------------------------
+# THEME / STYLE — brighter, kid-friendly, playful font + starfield + glow
+# ----------------------------------------------------------------------------
+st.markdown("""
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Baloo+2:wght@500;700;800&display=swap');
+
+html, body, [class*="css"] { font-family: 'Baloo 2', sans-serif !important; }
+
+.stApp {
+    background: radial-gradient(circle at 15% 10%, #241a3d 0%, #0a0a18 45%),
+                radial-gradient(circle at 85% 90%, #1a2740 0%, #0a0a18 55%),
+                #0a0a14;
+    background-attachment: fixed;
+}
+h1, h2, h3, p, label, span, div { color: #f5f5ff; }
+
+.big-word {
+    font-size: 66px; font-weight: 800; text-align: center;
+    padding: 20px; border-radius: 20px; margin: 10px 0 20px 0;
+    letter-spacing: 3px;
+    background: linear-gradient(135deg, rgba(255,0,200,0.12), rgba(0,240,255,0.12));
+    border: 2px solid rgba(255,255,255,0.08);
+}
+.big-sentence {
+    font-size: 32px; font-weight: 700; text-align: center;
+    padding: 16px; border-radius: 16px; margin: 10px 0 16px 0;
+}
+@keyframes zapshake {
+    0% { transform: translate(0,0) scale(1); } 20% { transform: translate(-5px,3px) scale(1.05); }
+    40% { transform: translate(5px,-3px) scale(1.05); } 60% { transform: translate(-4px,0) scale(1.02); }
+    80% { transform: translate(4px,2px) scale(1.02); } 100% { transform: translate(0,0) scale(1); }
+}
+@keyframes floaty {
+    0%, 100% { transform: translateY(0px); }
+    50% { transform: translateY(-8px); }
+}
+.monster-box { text-align: center; padding: 10px 0 4px 0; }
+.monster-emoji { font-size: 100px; animation: zapshake 0.4s ease-in-out, floaty 3s ease-in-out infinite; display:inline-block; }
+.hp-bar-bg {
+    width: 280px; height: 18px; background: #23233066; border-radius: 999px;
+    margin: 8px auto; overflow: hidden; border: 2px solid #ffffff22;
+}
+.hp-bar-fill {
+    height: 100%; background: linear-gradient(90deg,#ff3050,#ff9050,#ffd23f);
+    transition: width 0.3s ease; border-radius: 999px;
+}
+.boss-tag {
+    display:inline-block; padding: 6px 16px; border-radius: 999px;
+    font-size: 13px; font-weight: 800; letter-spacing: 1px; margin-bottom: 10px;
+}
+@keyframes popscale {
+    0% { transform: scale(0.3) rotate(-8deg); opacity: 0; }
+    60% { transform: scale(1.25) rotate(3deg); opacity: 1; }
+    100% { transform: scale(1) rotate(0deg); opacity: 1; }
+}
+.pop-number {
+    font-size: 44px; font-weight: 900; text-align: center; margin: 8px 0;
+    animation: popscale 0.5s ease-out;
+    text-shadow: 0 0 18px currentColor;
+}
+.rarity-badge {
+    display:inline-block; padding: 4px 14px; border-radius: 999px;
+    font-size: 13px; font-weight: 800; letter-spacing: 1px;
+}
+.catch-banner {
+    text-align:center; padding: 20px; border-radius: 18px; margin-bottom: 16px;
+    background: linear-gradient(160deg, #1c1c2e, #14141f);
+    border: 2px solid #ffffff14;
+    animation: popscale 0.55s ease-out;
+}
+.collection-card {
+    text-align:center; background: linear-gradient(160deg,#1a1a28,#131320);
+    border-radius:16px; padding:14px; margin-bottom:12px; border:1px solid #ffffff14;
+}
+.achievement-card {
+    background: linear-gradient(160deg,#1a1a28,#131320); border-radius:14px;
+    padding: 14px 18px; margin-bottom: 10px; display:flex; align-items:center; gap:14px;
+    border: 1px solid #ffffff14;
+}
+.story-box {
+    background: linear-gradient(160deg,#1a1a28,#131320); border-radius: 18px; padding: 24px; font-size: 22px;
+    line-height: 1.7; margin-bottom: 16px; border: 1px solid #ffffff14;
+}
+.hud-box {
+    background: linear-gradient(160deg,#1a1a28,#131320); border: 1px solid #ffffff1a; border-radius: 14px;
+    padding: 12px 18px; margin-bottom: 16px; font-family: 'Baloo 2', sans-serif; font-size: 16px; font-weight: 600;
+}
+div.stButton > button {
+    font-family: 'Baloo 2', sans-serif;
+    font-size: 21px; font-weight: 800; border-radius: 16px; padding: 15px 10px;
+    width: 100%; border: none;
+    background: linear-gradient(135deg, #ff3fa4, #7b2ff7);
+    color: white;
+    box-shadow: 0 4px 0 #4a1a99, 0 6px 14px rgba(0,0,0,0.35);
+    transition: transform 0.08s ease;
+}
+div.stButton > button:active {
+    transform: translateY(3px);
+    box-shadow: 0 1px 0 #4a1a99;
+}
+</style>
+""", unsafe_allow_html=True)
+
+def fire_confetti(colors=None):
+    import streamlit.components.v1 as components
+    colors = colors or ["#ffd23f", "#ff3fa4", "#00f0ff", "#7b2ff7", "#50ff50"]
+    html = """
+    <div id="confetti-wrap" style="height:120px;"></div>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/canvas-confetti/1.9.2/confetti.browser.min.js"></script>
+    <script>
+    if (window.confetti) {
+        confetti({
+            particleCount: 120,
+            spread: 90,
+            origin: { y: 0.3 },
+            colors: COLORS_JSON,
+        });
+    }
+    </script>
+    """
+    html = html.replace("COLORS_JSON", json.dumps(colors))
+    components.html(html, height=120)
+
+# ----------------------------------------------------------------------------
+# GAME DATA
+# ----------------------------------------------------------------------------
+EXPLORERS = {
+    "COMET CAT":     {"power": "STAR CLAWS",      "color": "#FF3050", "desc": "Fast and fearless — great streak bonuses."},
+    "STAR GUARDIAN": {"power": "AURORA STAFF",    "color": "#00F0FF", "desc": "Steady and wise — extra energy to start."},
+    "GEAR BOT":      {"power": "SPARK WRENCH",    "color": "#50FF50", "desc": "Loves gadgets — earns bonus shards."},
+    "SHADOW FOX":    {"power": "MOON DAGGER",     "color": "#FF00C8", "desc": "Sneaky and quick — extra hints."},
+    "NOVA DRIFTER":  {"power": "SINGULARITY ORB", "color": "#B000FF", "desc": "Calm explorer — shields against mistakes."},
+}
+
+UPGRADE_DEFS = {
+    "hint_power":    {"name": "Hint Beacon",   "max": 5, "desc": "Reveal a letter hint before guessing (+1 use/lvl)"},
+    "shield_will":   {"name": "Iron Will",     "max": 5, "desc": "Chance to not lose energy on a wrong answer (+8%/lvl)"},
+    "shard_magnet":  {"name": "Shard Magnet",  "max": 5, "desc": "Extra star shards per correct answer (+1/lvl)"},
+    "streak_focus":  {"name": "Focus Streak",  "max": 5, "desc": "Bonus points for answer streaks (+10%/lvl)"},
+    "vital_core":    {"name": "Vital Core",    "max": 5, "desc": "Increases max energy (+1 max/lvl)"},
+}
+
+WORD_BANK = [
+    ("cat", "🐱"), ("dog", "🐶"), ("sun", "☀️"), ("moon", "🌙"), ("star", "⭐"),
+    ("tree", "🌳"), ("fish", "🐟"), ("bird", "🐦"), ("ball", "⚽"), ("book", "📚"),
+    ("apple", "🍎"), ("cake", "🎂"), ("hat", "🎩"), ("shoe", "👟"), ("bed", "🛏️"),
+    ("house", "🏠"), ("car", "🚗"), ("boat", "⛵"), ("flower", "🌸"), ("frog", "🐸"),
+    ("duck", "🦆"), ("egg", "🥚"), ("milk", "🥛"), ("rain", "🌧️"), ("snow", "❄️"),
+    ("king", "👑"), ("queen", "👸"), ("dragon", "🐉"), ("robot", "🤖"), ("rocket", "🚀"),
+    ("banana", "🍌"), ("orange", "🍊"), ("grape", "🍇"), ("cookie", "🍪"), ("pizza", "🍕"),
+    ("cheese", "🧀"), ("bread", "🍞"), ("lion", "🦁"), ("tiger", "🐯"), ("bear", "🐻"),
+    ("monkey", "🐵"), ("rabbit", "🐰"), ("mouse", "🐭"), ("cow", "🐮"), ("pig", "🐷"),
+    ("sheep", "🐑"), ("horse", "🐴"), ("owl", "🦉"), ("bee", "🐝"), ("spider", "🕷️"),
+    ("snail", "🐌"), ("whale", "🐳"), ("shark", "🦈"), ("crab", "🦀"), ("turtle", "🐢"),
+    ("train", "🚂"), ("bus", "🚌"), ("plane", "✈️"), ("key", "🔑"), ("clock", "🕐"),
+    ("phone", "📱"), ("chair", "🪑"), ("door", "🚪"), ("lamp", "💡"), ("candle", "🕯️"),
+    ("sock", "🧦"), ("coat", "🧥"), ("ring", "💍"), ("gift", "🎁"), ("kite", "🪁"),
+    ("drum", "🥁"), ("guitar", "🎸"), ("balloon", "🎈"), ("ice", "🧊"), ("fire", "🔥"),
+    ("cloud", "☁️"), ("island", "🏝️"),
+    ("red", "🟥"), ("blue", "🟦"), ("green", "🟩"), ("yellow", "🟨"), ("purple", "🟪"),
+    ("black", "⬛"), ("white", "⬜"), ("brown", "🟫"),
+    ("one", "1️⃣"), ("two", "2️⃣"), ("three", "3️⃣"), ("four", "4️⃣"), ("five", "5️⃣"),
+    ("six", "6️⃣"), ("seven", "7️⃣"), ("eight", "8️⃣"), ("nine", "9️⃣"), ("ten", "🔟"),
+    ("eye", "👁️"), ("ear", "👂"), ("nose", "👃"), ("hand", "✋"), ("foot", "🦶"), ("tooth", "🦷"),
+    ("happy", "😀"), ("sad", "😢"), ("angry", "😠"), ("scared", "😨"), ("sleepy", "😪"),
+    ("pencil", "✏️"), ("scissors", "✂️"), ("ruler", "📏"), ("backpack", "🎒"), ("crayon", "🖍️"),
+    ("basketball", "🏀"), ("swim", "🏊"), ("run", "🏃"), ("dance", "💃"),
+    ("truck", "🚚"), ("ship", "🚢"), ("wind", "💨"),
+]
+
+# Harder / longer words unlocked from wave 3 onward, to ramp up difficulty
+HARDER_WORDS = [
+    ("bicycle", "🚲"), ("butterfly", "🦋"), ("elephant", "🐘"), ("mountain", "⛰️"),
+    ("rainbow", "🌈"), ("penguin", "🐧"), ("dinosaur", "🦕"), ("volcano", "🌋"),
+    ("spaceship", "🛸"), ("treasure", "💰"), ("wizard", "🧙"), ("castle", "🏰"),
+    ("garden", "🌻"), ("thunder", "⛈️"), ("octopus", "🐙"), ("umbrella", "☂️"),
+    ("helicopter", "🚁"), ("astronaut", "🧑‍🚀"), ("skateboard", "🛹"), ("motorcycle", "🏍️"),
+    ("snowman", "⛄"), ("jellyfish", "🪼"), ("hedgehog", "🦔"), ("kangaroo", "🦘"),
+    ("chameleon", "🦎"), ("firetruck", "🚒"), ("tractor", "🚜"), ("compass", "🧭"),
+    ("telescope", "🔭"), ("pirate", "🏴‍☠️"), ("dolphin", "🐬"), ("peacock", "🦚"),
+    ("flamingo", "🦩"), ("unicorn", "🦄"), ("scientist", "🧑‍🔬"), ("firefighter", "👨‍🚒"),
+    ("magician", "🧙‍♂️"), ("blueberry", "🫐"), ("strawberry", "🍓"), ("pineapple", "🍍"),
+    ("mushroom", "🍄"), ("sandwich", "🥪"), ("pancake", "🥞"), ("spaghetti", "🍝"),
+]
+
+MONSTERS = [
+    ("Grumblin", "👾"), ("Wobble Ghost", "👻"), ("Snaggle Dragon", "🐲"),
+    ("Puddle Squid", "🦑"), ("Party Yeti", "☃️"), ("Sir Snorts-a-lot", "🐗"),
+    ("Glimmer Bat", "🦇"), ("Fizzle Imp", "😈"), ("Bubblewump", "🫧"),
+    ("Grinny Croc", "🐊"), ("Captain Clawface", "🦀"), ("Mister Mumbles", "🦥"),
+    ("Sparklepuff", "🦄"), ("Grimsnout", "🐺"), ("Nibbles the Gremlin", "👺"),
+    ("Tinselfang", "🦌"),
+    ("Ice Queen Frostina", "🥶"), ("Lava Lurker", "🌋"), ("Crystal Golem", "💎"),
+    ("Shadow Wisp", "🌑"), ("Giggling Slime", "🟢"), ("Professor Fuzzbucket", "🦫"),
+    ("Captain Barnacle", "🐚"), ("Whisker the Sneak", "🐈‍⬛"), ("Static Sparky", "⚡"),
+    ("Moonbeam Moth", "🦋"), ("Grumpy Cloud", "🌧️"), ("Sir Reginald Rex", "🦖"),
+    ("Cinder", "🔥"), ("Glacia", "🧊"),
+]
+
+# Rarity tiers for the creature collection (weights sum to 1.0)
+RARITIES = [
+    ("Common", 0.55, "#9aa0a6"),
+    ("Rare", 0.28, "#00f0ff"),
+    ("Epic", 0.13, "#b000ff"),
+    ("Legendary", 0.04, "#ffd700"),
+]
+
+def roll_rarity():
+    r = random.random()
+    cum = 0.0
+    for name, weight, color in RARITIES:
+        cum += weight
+        if r <= cum:
+            return name, color
+    return RARITIES[-1][0], RARITIES[-1][2]
+
+# Boss round question bank: type is grammar / vocab / rhyme / comprehension
+BOSS_QUESTIONS = [
+    {"type": "grammar", "prompt": "The dog ___ fast.", "options": ["run", "runs", "running"], "answer": 1},
+    {"type": "grammar", "prompt": "I ___ two apples.", "options": ["has", "have", "having"], "answer": 1},
+    {"type": "grammar", "prompt": "She ___ happy today.", "options": ["is", "are", "am"], "answer": 0},
+    {"type": "grammar", "prompt": "We ___ playing outside.", "options": ["is", "am", "are"], "answer": 2},
+    {"type": "grammar", "prompt": "The cats ___ on the bed.", "options": ["sleep", "sleeps", "sleeping"], "answer": 0},
+    {"type": "grammar", "prompt": "Yesterday, I ___ to the park.", "options": ["go", "went", "going"], "answer": 1},
+    {"type": "grammar", "prompt": "There ___ three books on the table.", "options": ["is", "are", "be"], "answer": 1},
+    {"type": "grammar", "prompt": "He ___ his homework every day.", "options": ["do", "does", "doing"], "answer": 1},
+    {"type": "grammar", "prompt": "They ___ happy to see us.", "options": ["was", "were", "is"], "answer": 1},
+    {"type": "grammar", "prompt": "My sister ___ a new bike.", "options": ["have", "has", "having"], "answer": 1},
+    {"type": "grammar", "prompt": "The birds ___ south every winter.", "options": ["flies", "fly", "flying"], "answer": 1},
+    {"type": "grammar", "prompt": "I ___ my homework already.", "options": ["finish", "finished", "finishing"], "answer": 1},
+    {"type": "grammar", "prompt": "___ you like ice cream?", "options": ["Do", "Does", "Is"], "answer": 0},
+    {"type": "grammar", "prompt": "The baby ___ crying.", "options": ["is", "are", "am"], "answer": 0},
+    {"type": "grammar", "prompt": "We ___ going to the zoo tomorrow.", "options": ["was", "is", "are"], "answer": 2},
+    {"type": "grammar", "prompt": "One mouse, two ___.", "options": ["mouses", "mice", "mouses"], "answer": 1},
+    {"type": "grammar", "prompt": "One child, two ___.", "options": ["childs", "children", "childes"], "answer": 1},
+    {"type": "grammar", "prompt": "One foot, two ___.", "options": ["foots", "feet", "footes"], "answer": 1},
+    {"type": "grammar", "prompt": "One box, two ___.", "options": ["boxs", "boxes", "boxies"], "answer": 1},
+    {"type": "grammar", "prompt": "One baby, two ___.", "options": ["babys", "babies", "babyes"], "answer": 1},
+    {"type": "vocab", "prompt": "Which word means the opposite of 'big'?", "options": ["small", "tall", "fast"], "answer": 0},
+    {"type": "vocab", "prompt": "Which word means the opposite of 'happy'?", "options": ["sad", "funny", "loud"], "answer": 0},
+    {"type": "vocab", "prompt": "Which word means the same as 'quick'?", "options": ["slow", "fast", "quiet"], "answer": 1},
+    {"type": "vocab", "prompt": "Which word means the opposite of 'up'?", "options": ["down", "left", "big"], "answer": 0},
+    {"type": "vocab", "prompt": "Which word means 'a baby dog'?", "options": ["kitten", "puppy", "cub"], "answer": 1},
+    {"type": "vocab", "prompt": "Which word means the opposite of 'hot'?", "options": ["cold", "wet", "loud"], "answer": 0},
+    {"type": "vocab", "prompt": "Which word means the opposite of 'fast'?", "options": ["slow", "loud", "tall"], "answer": 0},
+    {"type": "vocab", "prompt": "Which word means the opposite of 'day'?", "options": ["night", "sun", "rain"], "answer": 0},
+    {"type": "vocab", "prompt": "Which word means the same as 'small'?", "options": ["tiny", "huge", "wide"], "answer": 0},
+    {"type": "vocab", "prompt": "Which word means the opposite of 'wet'?", "options": ["dry", "cold", "soft"], "answer": 0},
+    {"type": "vocab", "prompt": "Which word means 'a young cat'?", "options": ["kitten", "puppy", "cub"], "answer": 0},
+    {"type": "vocab", "prompt": "Which word means the opposite of 'open'?", "options": ["closed", "loud", "big"], "answer": 0},
+    {"type": "vocab", "prompt": "Which word means 'very happy'?", "options": ["joyful", "tired", "angry"], "answer": 0},
+    {"type": "vocab", "prompt": "Which word means the opposite of 'clean'?", "options": ["dirty", "wet", "soft"], "answer": 0},
+    {"type": "vocab", "prompt": "Which word means the opposite of 'young'?", "options": ["old", "new", "big"], "answer": 0},
+    {"type": "vocab", "prompt": "Which word means the opposite of 'full'?", "options": ["empty", "heavy", "loud"], "answer": 0},
+    {"type": "vocab", "prompt": "Which word means the opposite of 'easy'?", "options": ["hard", "soft", "slow"], "answer": 0},
+    {"type": "vocab", "prompt": "Which word means the opposite of 'loud'?", "options": ["quiet", "small", "fast"], "answer": 0},
+    {"type": "vocab", "prompt": "Which word means the same as 'pretty'?", "options": ["beautiful", "ugly", "plain"], "answer": 0},
+    {"type": "vocab", "prompt": "Which word means the same as 'scared'?", "options": ["afraid", "brave", "happy"], "answer": 0},
+    {"type": "vocab", "prompt": "Which word means the same as 'huge'?", "options": ["giant", "tiny", "short"], "answer": 0},
+    {"type": "vocab", "prompt": "Which word means 'a place to learn'?", "options": ["school", "store", "park"], "answer": 0},
+    {"type": "vocab", "prompt": "Which word means 'a group of stars'?", "options": ["constellation", "planet", "comet"], "answer": 0},
+    {"type": "rhyme", "prompt": "Which word rhymes with 'cat'?", "options": ["dog", "hat", "sun"], "answer": 1},
+    {"type": "rhyme", "prompt": "Which word rhymes with 'star'?", "options": ["car", "tree", "fish"], "answer": 0},
+    {"type": "rhyme", "prompt": "Which word rhymes with 'sun'?", "options": ["moon", "fun", "cat"], "answer": 1},
+    {"type": "rhyme", "prompt": "Which word rhymes with 'hop'?", "options": ["top", "dog", "cake"], "answer": 0},
+    {"type": "rhyme", "prompt": "Which word rhymes with 'tree'?", "options": ["bee", "car", "hat"], "answer": 0},
+    {"type": "rhyme", "prompt": "Which word rhymes with 'dog'?", "options": ["frog", "cat", "sun"], "answer": 0},
+    {"type": "rhyme", "prompt": "Which word rhymes with 'bee'?", "options": ["tree", "dog", "hat"], "answer": 0},
+    {"type": "rhyme", "prompt": "Which word rhymes with 'light'?", "options": ["night", "day", "sun"], "answer": 0},
+    {"type": "rhyme", "prompt": "Which word rhymes with 'shell'?", "options": ["bell", "dog", "hat"], "answer": 0},
+    {"type": "rhyme", "prompt": "Which word rhymes with 'king'?", "options": ["ring", "sun", "dog"], "answer": 0},
+    {"type": "rhyme", "prompt": "Which word rhymes with 'box'?", "options": ["fox", "cat", "sun"], "answer": 0},
+    {"type": "rhyme", "prompt": "Which word rhymes with 'moon'?", "options": ["spoon", "star", "dog"], "answer": 0},
+    {"type": "rhyme", "prompt": "Which word rhymes with 'ball'?", "options": ["tall", "dog", "cat"], "answer": 0},
+    {"type": "rhyme", "prompt": "Which word rhymes with 'nice'?", "options": ["rice", "dog", "hat"], "answer": 0},
+    {"type": "rhyme", "prompt": "Which word rhymes with 'day'?", "options": ["play", "dog", "cat"], "answer": 0},
+    {"type": "rhyme", "prompt": "Which word rhymes with 'rock'?", "options": ["sock", "cat", "sun"], "answer": 0},
+    {"type": "rhyme", "prompt": "Which word rhymes with 'wall'?", "options": ["tall", "fish", "dog"], "answer": 0},
+    {"type": "rhyme", "prompt": "Which word rhymes with 'goat'?", "options": ["boat", "cat", "sun"], "answer": 0},
+    {"type": "rhyme", "prompt": "Which word rhymes with 'cake'?", "options": ["lake", "dog", "hat"], "answer": 0},
+    {"type": "rhyme", "prompt": "Which word rhymes with 'bug'?", "options": ["rug", "cat", "sun"], "answer": 0},
+    {"type": "rhyme", "prompt": "Which word rhymes with 'jump'?", "options": ["bump", "cat", "dog"], "answer": 0},
+    {"type": "rhyme", "prompt": "Which word rhymes with 'nose'?", "options": ["rose", "cat", "dog"], "answer": 0},
+    {"type": "comprehension", "passage": "Tom has a red ball. He likes to play with his dog in the park.",
+     "prompt": "What color is Tom's ball?", "options": ["red", "blue", "green"], "answer": 0},
+    {"type": "comprehension", "passage": "Lily planted a seed. She watered it every day. Soon, a flower grew.",
+     "prompt": "What grew from the seed?", "options": ["A tree", "A flower", "A rock"], "answer": 1},
+    {"type": "comprehension", "passage": "The sun was hot, so the children went to swim in the lake.",
+     "prompt": "Why did the children go swim?", "options": ["They were bored", "The sun was hot", "It was raining"], "answer": 1},
+    {"type": "comprehension", "passage": "Ben lost his shoe under the bed. He looked and looked until he found it.",
+     "prompt": "Where was Ben's shoe?", "options": ["In the kitchen", "Under the bed", "In the yard"], "answer": 1},
+    {"type": "comprehension", "passage": "Sam wanted a puppy. On his birthday, his mom gave him a fluffy brown puppy.",
+     "prompt": "What did Sam get for his birthday?", "options": ["A puppy", "A bike", "A book"], "answer": 0},
+    {"type": "comprehension", "passage": "The little seed grew into a tall sunflower. Birds loved to sit on its petals.",
+     "prompt": "What did the seed grow into?", "options": ["A sunflower", "A tree", "A bush"], "answer": 0},
+    {"type": "comprehension", "passage": "Anna forgot her umbrella. She got very wet walking home in the rain.",
+     "prompt": "Why did Anna get wet?", "options": ["She fell in a pool", "She forgot her umbrella", "She was swimming"], "answer": 1},
+    {"type": "comprehension", "passage": "The three friends built a sandcastle at the beach. A big wave washed it away.",
+     "prompt": "What washed the sandcastle away?", "options": ["The wind", "A big wave", "A dog"], "answer": 1},
+    {"type": "comprehension", "passage": "Jack couldn't sleep, so he counted sheep until his eyes felt heavy.",
+     "prompt": "What did Jack do to fall asleep?", "options": ["Counted sheep", "Read a book", "Sang a song"], "answer": 0},
+    {"type": "comprehension", "passage": "Emma loves painting. Every Saturday, she paints a picture of her backyard garden.",
+     "prompt": "What does Emma paint?", "options": ["Her backyard garden", "Her school", "Her dog"], "answer": 0},
+    {"type": "comprehension", "passage": "The little bear was hungry. He found honey in a tree and ate it happily.",
+     "prompt": "What did the bear eat?", "options": ["Honey", "Fish", "Berries"], "answer": 0},
+    {"type": "comprehension", "passage": "Max practiced every day to learn to swim. By summer, he could swim across the whole pool.",
+     "prompt": "What did Max learn to do?", "options": ["Swim", "Ride a bike", "Sing"], "answer": 0},
+    {"type": "comprehension", "passage": "The old clock in the hallway stopped ticking. Dad opened it up and fixed a tiny gear inside.",
+     "prompt": "What was wrong with the clock?", "options": ["A tiny gear was broken", "It was too loud", "It fell down"], "answer": 0},
+    {"type": "comprehension", "passage": "Every night, Grandma tells a new bedtime story. Tonight's story was about a brave little mouse.",
+     "prompt": "Who was tonight's story about?", "options": ["A brave little mouse", "A giant", "A princess"], "answer": 0},
+    {"type": "spelling", "prompt": "Which word is spelled correctly?", "options": ["hapy", "happy", "happyy"], "answer": 1},
+    {"type": "spelling", "prompt": "Which word is spelled correctly?", "options": ["littel", "little", "litle"], "answer": 1},
+    {"type": "spelling", "prompt": "Which word is spelled correctly?", "options": ["thier", "their", "theyr"], "answer": 1},
+    {"type": "spelling", "prompt": "Which word is spelled correctly?", "options": ["wich", "which", "whitch"], "answer": 1},
+    {"type": "spelling", "prompt": "Which word is spelled correctly?", "options": ["freind", "friend", "frend"], "answer": 1},
+    {"type": "spelling", "prompt": "Which word is spelled correctly?", "options": ["peopel", "people", "peple"], "answer": 1},
+    {"type": "spelling", "prompt": "Which word is spelled correctly?", "options": ["scool", "school", "shcool"], "answer": 1},
+    {"type": "spelling", "prompt": "Which word is spelled correctly?", "options": ["aminal", "animal", "annimal"], "answer": 1},
+    {"type": "spelling", "prompt": "Which word is spelled correctly?", "options": ["buetiful", "beautiful", "beatiful"], "answer": 1},
+]
+
+STORIES = [
+    {
+        "title": "The Lost Star",
+        "text": "Mia found a tiny star in her backyard. It was cold and could not shine. "
+                "She held it gently and gave it a warm blanket. Soon, the star began to glow again.",
+        "questions": [
+            {"q": "Where did Mia find the star?", "options": ["In her backyard", "At school", "In a book"], "answer": 0},
+            {"q": "How did Mia help the star?", "options": ["She threw it away", "She gave it a warm blanket", "She ate it"], "answer": 1},
+            {"q": "What happened at the end?", "options": ["The star cried", "The star ran away", "The star began to glow"], "answer": 2},
+        ],
+    },
+    {
+        "title": "Gearbot's Big Day",
+        "text": "Gearbot loved fixing things. One morning, his spaceship would not start. "
+                "He checked every wire until he found a loose one. He fixed it, and the ship zoomed into space.",
+        "questions": [
+            {"q": "What did Gearbot love to do?", "options": ["Sing", "Fixing things", "Sleeping"], "answer": 1},
+            {"q": "What was wrong with the ship?", "options": ["It had no fuel", "A loose wire", "It was too small"], "answer": 1},
+            {"q": "What happened after he fixed it?", "options": ["It broke again", "It zoomed into space", "It turned pink"], "answer": 2},
+        ],
+    },
+    {
+        "title": "The Shy Fox",
+        "text": "A little fox was too shy to play with the other animals. One day, a rabbit invited her to play tag. "
+                "The fox smiled, said yes, and had the best day ever.",
+        "questions": [
+            {"q": "How did the fox feel at first?", "options": ["Shy", "Angry", "Sleepy"], "answer": 0},
+            {"q": "Who invited the fox to play?", "options": ["A bird", "A rabbit", "A dog"], "answer": 1},
+            {"q": "What game did they play?", "options": ["Hide and seek", "Tag", "Chess"], "answer": 1},
+        ],
+    },
+    {
+        "title": "The Brave Little Robot",
+        "text": "A small robot named Bolt saw trash all over the park. He rolled around and picked up every piece. "
+                "By sunset, the park sparkled clean, and everyone cheered for Bolt.",
+        "questions": [
+            {"q": "What did Bolt see in the park?", "options": ["Trash", "Flowers", "Puppies"], "answer": 0},
+            {"q": "What did Bolt do?", "options": ["He picked up trash", "He took a nap", "He ran away"], "answer": 0},
+            {"q": "How did people feel about Bolt?", "options": ["Angry", "They cheered for him", "Scared"], "answer": 1},
+        ],
+    },
+    {
+        "title": "Sparklepuff's Wish",
+        "text": "Sparklepuff the unicorn wanted to fly like a bird. A wise owl taught her to believe in herself. "
+                "Sparklepuff tried her hardest, and soon she was soaring above the clouds.",
+        "questions": [
+            {"q": "What did Sparklepuff want to do?", "options": ["Swim", "Fly", "Sing"], "answer": 1},
+            {"q": "Who helped Sparklepuff?", "options": ["A wise owl", "A dragon", "A fish"], "answer": 0},
+            {"q": "What happened in the end?", "options": ["She gave up", "She soared above the clouds", "She fell asleep"], "answer": 1},
+        ],
+    },
+    {
+        "title": "The Missing Kite",
+        "text": "The wind blew Ben's kite far away into a tall tree. His dog Rex barked and pointed with his nose. "
+                "Ben climbed up carefully and got his kite back.",
+        "questions": [
+            {"q": "Where did the kite fly?", "options": ["Into a tall tree", "Into the lake", "Into a house"], "answer": 0},
+            {"q": "How did Rex help?", "options": ["He barked and pointed", "He flew the kite", "He hid it"], "answer": 0},
+            {"q": "What did Ben do?", "options": ["He cried", "He climbed up and got it", "He bought a new kite"], "answer": 1},
+        ],
+    },
+    {
+        "title": "Rainy Day Fun",
+        "text": "It rained all day, so Mia and her brother could not play outside. "
+                "They built a cozy fort out of blankets and read stories inside it until bedtime.",
+        "questions": [
+            {"q": "Why couldn't they play outside?", "options": ["It rained all day", "They were tired", "It was too hot"], "answer": 0},
+            {"q": "What did they build?", "options": ["A blanket fort", "A sandcastle", "A treehouse"], "answer": 0},
+            {"q": "What did they do inside?", "options": ["Read stories", "Watched TV all day", "Cleaned the house"], "answer": 0},
+        ],
+    },
+    {
+        "title": "The New Friend",
+        "text": "A new girl named Zoe sat alone at lunch on her first day. Maya walked over and shared her crayons with her. "
+                "By the end of the day, Zoe and Maya were best friends.",
+        "questions": [
+            {"q": "Why was Zoe sitting alone?", "options": ["It was her first day", "She was in trouble", "She was tired"], "answer": 0},
+            {"q": "What did Maya share?", "options": ["Her crayons", "Her lunch", "Her book"], "answer": 0},
+            {"q": "What happened by the end of the day?", "options": ["They became best friends", "They argued", "Zoe went home"], "answer": 0},
+        ],
+    },
+    {
+        "title": "The Kind Dragon",
+        "text": "Everyone in the village was scared of the big dragon on the hill. One day, a boy climbed up and found "
+                "the dragon baking cookies for anyone who visited. Soon, the whole village became his friend.",
+        "questions": [
+            {"q": "Why was the village scared?", "options": ["Of the dragon", "Of a storm", "Of a wolf"], "answer": 0},
+            {"q": "What was the dragon really doing?", "options": ["Baking cookies", "Breathing fire", "Sleeping"], "answer": 0},
+            {"q": "What happened in the end?", "options": ["The village became his friend", "The dragon left", "Nothing changed"], "answer": 0},
+        ],
+    },
+    {
+        "title": "Lost in the Library",
+        "text": "Nora found an old book that seemed to whisper her name. Inside, the pages glowed and told a new story "
+                "every time she opened it. She visited the library every day just to hear more.",
+        "questions": [
+            {"q": "What did Nora find?", "options": ["An old book", "A map", "A key"], "answer": 0},
+            {"q": "What was special about the book?", "options": ["It whispered and glowed", "It was very heavy", "It had no pages"], "answer": 0},
+            {"q": "What did Nora do every day?", "options": ["Visited the library", "Went swimming", "Played soccer"], "answer": 0},
+        ],
+    },
+    {
+        "title": "The Great Race",
+        "text": "Everyone laughed when the snail entered the race, sure he would finish last. He never gave up, "
+                "and even though he finished last, all his friends cheered the loudest for him.",
+        "questions": [
+            {"q": "Who entered the race?", "options": ["A snail", "A rabbit", "A turtle"], "answer": 0},
+            {"q": "Did the snail give up?", "options": ["No, he never gave up", "Yes, right away", "He didn't race"], "answer": 0},
+            {"q": "How did his friends react?", "options": ["They cheered the loudest for him", "They laughed at him", "They ignored him"], "answer": 0},
+        ],
+    },
+    {
+        "title": "Star Watchers",
+        "text": "Ana and her brother stayed up past bedtime to watch a meteor shower. Streaks of light zoomed across "
+                "the sky, and together they made a wish on the brightest one.",
+        "questions": [
+            {"q": "What did they stay up to watch?", "options": ["A meteor shower", "A movie", "Fireworks"], "answer": 0},
+            {"q": "What did they see in the sky?", "options": ["Streaks of light", "Balloons", "Airplanes"], "answer": 0},
+            {"q": "What did they do together?", "options": ["Made a wish", "Went to sleep", "Played a game"], "answer": 0},
+        ],
+    },
+]
+
+READ_ALOUD_LINES = [
+    "The cat sat on the mat.",
+    "I can see a big red star.",
+    "The dog ran to the park.",
+    "We like to sing and dance.",
+    "The moon glows at night.",
+    "A little frog hops on a log.",
+    "My best friend has a red kite.",
+    "The stars shine bright in the sky.",
+    "I read a book before bed.",
+    "The bunny hops through the grass.",
+    "We built a sandcastle at the beach.",
+    "The puppy chased its own tail.",
+    "The bee buzzed around the flower.",
+    "My dad cooks pancakes on Sunday.",
+    "The train goes choo choo down the tracks.",
+    "She wears a blue coat in winter.",
+    "The fish swims in the blue pond.",
+    "He counts to ten every morning.",
+    "The kite flies high in the sky.",
+    "We laughed at the silly clown.",
+]
+
+TYPE_LABELS = {
+    "grammar": ("📐 GRAMMAR", "#00F0FF"),
+    "vocab": ("📖 VOCABULARY", "#50FF50"),
+    "rhyme": ("🎵 RHYME TIME", "#FF00C8"),
+    "comprehension": ("🧠 COMPREHENSION", "#FF9050"),
+    "spelling": ("🔤 SPELLING", "#FFD23F"),
+}
+
+ZONES = [
+    (1, 5, "Nebula Fields", "🌌"),
+    (6, 10, "Frozen Moons", "🌙"),
+    (11, 15, "Lava Belt", "🌋"),
+    (16, 20, "Crystal Caverns", "💎"),
+    (21, 10**9, "Deep Space Frontier", "🌠"),
+]
+
+def get_zone(wave):
+    for lo, hi, name, emoji in ZONES:
+        if lo <= wave <= hi:
+            return name, emoji
+    return ZONES[-1][2], ZONES[-1][3]
+
+ACHIEVEMENTS = [
+    ("first_catch", "🎉", "First Catch!", "Caught your very first creature"),
+    ("collector_5", "📦", "Collector", "Caught 5 creatures"),
+    ("collector_15", "🏆", "Master Collector", "Caught 15 creatures"),
+    ("collector_30", "👑", "Ultimate Collector", "Caught 30 creatures"),
+    ("legendary", "🌟", "Legendary Find", "Caught a Legendary creature"),
+    ("legendary_3", "💫", "Legend Hunter", "Caught 3 Legendary creatures"),
+    ("wave5", "🌊", "Wave Rider", "Reached Wave 5"),
+    ("wave10", "🚀", "Deep Space Explorer", "Reached Wave 10"),
+    ("wave15", "🛰️", "Frontier Voyager", "Reached Wave 15"),
+    ("wave20", "🌠", "Galaxy Legend", "Reached Wave 20"),
+    ("streak10", "🔥", "On Fire", "Got a 10-answer streak"),
+    ("streak20", "💥", "Unstoppable", "Got a 20-answer streak"),
+    ("perfect_boss", "💯", "Perfect Score", "Got a perfect Boss Round (5/5)"),
+    ("perfect_boss_5", "🏵️", "Boss Slayer", "Got 5 perfect Boss Rounds"),
+    ("words_50", "📖", "Word Wizard", "Read 50 words correctly"),
+    ("words_150", "🧠", "Reading Master", "Read 150 words correctly"),
+    ("words_300", "🎓", "Vocabulary Champion", "Read 300 words correctly"),
+    ("all_upgrades_maxed", "🛠️", "Fully Upgraded", "Maxed out every power-up"),
+]
+
+def achievement_unlocked(aid):
+    if aid == "first_catch": return len(st.session_state.collection) >= 1
+    if aid == "collector_5": return len(st.session_state.collection) >= 5
+    if aid == "collector_15": return len(st.session_state.collection) >= 15
+    if aid == "collector_30": return len(st.session_state.collection) >= 30
+    if aid == "legendary": return st.session_state.stats["legendary_catches"] >= 1
+    if aid == "legendary_3": return st.session_state.stats["legendary_catches"] >= 3
+    if aid == "wave5": return st.session_state.wave >= 5
+    if aid == "wave10": return st.session_state.wave >= 10
+    if aid == "wave15": return st.session_state.wave >= 15
+    if aid == "wave20": return st.session_state.wave >= 20
+    if aid == "streak10": return st.session_state.stats["best_streak"] >= 10
+    if aid == "streak20": return st.session_state.stats["best_streak"] >= 20
+    if aid == "perfect_boss": return st.session_state.stats["perfect_boss_rounds"] >= 1
+    if aid == "perfect_boss_5": return st.session_state.stats["perfect_boss_rounds"] >= 5
+    if aid == "words_50": return st.session_state.stats["words_correct"] >= 50
+    if aid == "words_150": return st.session_state.stats["words_correct"] >= 150
+    if aid == "words_300": return st.session_state.stats["words_correct"] >= 300
+    if aid == "all_upgrades_maxed":
+        return all(st.session_state.upgrade_levels[k] >= UPGRADE_DEFS[k]["max"] for k in UPGRADE_DEFS)
+    return False
+
+def check_achievements():
+    for aid, emoji, name, desc in ACHIEVEMENTS:
+        if aid not in st.session_state.achievements and achievement_unlocked(aid):
+            st.session_state.achievements.append(aid)
+            st.toast(f"Achievement unlocked: {name}!", icon=emoji)
+
+# ----------------------------------------------------------------------------
+# OPTIONAL AI QUESTION GENERATION (Google Gemini API)
+# ----------------------------------------------------------------------------
+def get_gemini_key():
+    if hasattr(st, "secrets"):
+        return st.secrets.get("GEMINI_API_KEY", None)
+    return None
+
+def generate_ai_boss_round(round_types, wave=1):
+    """Ask Gemini for all boss-round questions in ONE call (fast) instead of one call
+    per question (slow, and what caused the earlier stall). Returns a list of dicts in
+    the same shape as BOSS_QUESTIONS entries (same order as round_types), or None on
+    any failure — callers should fall back to the local question bank in that case."""
+    key = get_gemini_key()
+    if not key:
+        return None
+    difficulty = min(1 + wave // 2, 5)
+    type_instructions = {
+        "grammar": "a fill-in-the-blank grammar question (subject-verb agreement, tense, or plurals) with '___' in the sentence",
+        "vocab": "a vocabulary question about a word's opposite, synonym, or simple meaning",
+        "rhyme": "a question asking which word rhymes with a given simple word",
+        "comprehension": "a 1-2 sentence mini story ('passage') followed by a simple comprehension question about it",
+        "spelling": "a question asking which of 3 spellings of a common word is correct (2 should be plausible misspellings)",
+    }
+    items_desc = "\n".join(
+        f'{i + 1}. type="{t}": {type_instructions.get(t, type_instructions["vocab"])}'
+        for i, t in enumerate(round_types)
+    )
+    prompt = f"""Create {len(round_types)} short quiz questions for a 7-year-old learning to read English, one for each numbered item below:
+{items_desc}
+Difficulty level: {difficulty} out of 5 (1 = easiest, 5 = hardest). Higher levels should use slightly longer sentences,
+richer vocabulary, and trickier (but still fair) distractor options — while always staying appropriate and readable for a 7-year-old.
+Use simple, everyday, age-appropriate words only. Each question needs exactly 3 answer options with only one correct.
+Respond with ONLY a raw JSON array (no markdown fences) of {len(round_types)} objects, in the same order as the list above, each matching this shape:
+{{"type": "...", "prompt": "...", "passage": "..." (include only for comprehension type, omit otherwise), "options": ["...", "...", "..."], "answer": 0}}
+"answer" is the 0-based index of the correct option."""
+    try:
+        resp = requests.post(
+            GEMINI_URL,
+            headers={"x-goog-api-key": key, "Content-Type": "application/json"},
+            json={"contents": [{"parts": [{"text": prompt}]}]},
+            timeout=20,
+        )
+        resp.raise_for_status()
+        data = resp.json()
+        text = data["candidates"][0]["content"]["parts"][0]["text"].strip()
+        text = text.replace("```json", "").replace("```", "").strip()
+        arr = json.loads(text)
+        if isinstance(arr, list) and len(arr) == len(round_types):
+            for item, t in zip(arr, round_types):
+                if not all(k in item for k in ("prompt", "options", "answer")):
+                    return None
+                item["type"] = t
+                item["ai_generated"] = True
+            return arr
+    except Exception:
+        return None
+    return None
+
+# ----------------------------------------------------------------------------
+# STATE
+# ----------------------------------------------------------------------------
+def init_state():
+    defaults = {
+        "screen": "menu",
+        "explorer": None,
+        "wave": 1,
+        "max_energy": 5,
+        "energy": 5,
+        "shards": 0,
+        "score": 0,
+        "streak": 0,
+        "queue": [],
+        "q_index": 0,
+        "options": [],
+        "feedback": "",
+        "story_idx": 0,
+        "story_q_idx": 0,
+        "monster_name": "",
+        "monster_emoji": "",
+        "monster_hp": 0,
+        "monster_max_hp": 0,
+        "zap": False,
+        "boss_questions": [],
+        "boss_index": 0,
+        "boss_correct": 0,
+        "boss_choice": None,
+        "boss_feedback": "",
+        "boss_answered": False,
+        "collection": [],
+        "last_catch": None,
+        "last_gain": None,
+        "achievements": [],
+        "stats": {"words_correct": 0, "perfect_boss_rounds": 0, "best_streak": 0, "legendary_catches": 0},
+        "upgrade_levels": {k: 0 for k in UPGRADE_DEFS},
+    }
+    for k, v in defaults.items():
+        if k not in st.session_state:
+            st.session_state[k] = v
+
+init_state()
+
+def get_upg(key):
+    return st.session_state.upgrade_levels[key]
+
+def reset_run():
+    st.session_state.wave = 1
+    st.session_state.max_energy = 5 + get_upg("vital_core")
+    st.session_state.energy = st.session_state.max_energy
+    st.session_state.shards = 0
+    st.session_state.score = 0
+    st.session_state.streak = 0
+
+def build_wave():
+    wave = st.session_state.wave
+    word_pool = WORD_BANK if wave <= 2 else WORD_BANK + HARDER_WORDS
+    n = min(4 + wave, len(word_pool))
+    pool = random.sample(word_pool, n)
+    st.session_state.queue = pool
+    st.session_state.q_index = 0
+    st.session_state.feedback = ""
+    st.session_state.zap = False
+    st.session_state.last_gain = None
+    name, emoji = random.choice(MONSTERS)
+    st.session_state.monster_name = name
+    st.session_state.monster_emoji = emoji
+    st.session_state.monster_hp = n
+    st.session_state.monster_max_hp = n
+    check_achievements()
+    next_question()
+
+def next_question():
+    if st.session_state.q_index >= len(st.session_state.queue) or st.session_state.monster_hp <= 0:
+        build_boss_round()
+        st.session_state.screen = "boss"
+        return
+    current_pool = WORD_BANK if st.session_state.wave <= 2 else WORD_BANK + HARDER_WORDS
+    word, emoji = st.session_state.queue[st.session_state.q_index]
+    wrong = random.sample([w for w in current_pool if w[0] != word], 3)
+    opts = wrong + [(word, emoji)]
+    random.shuffle(opts)
+    st.session_state.options = opts
+    st.session_state.current_word = word
+    st.session_state.current_emoji = emoji
+
+def answer_word(chosen_word, chosen_emoji):
+    correct = chosen_word == st.session_state.current_word
+    if correct:
+        st.session_state.streak += 1
+        st.session_state.stats["best_streak"] = max(st.session_state.stats["best_streak"], st.session_state.streak)
+        st.session_state.stats["words_correct"] += 1
+        bonus = int(st.session_state.streak * (1 + get_upg("streak_focus") * 0.1))
+        gained_points = 10 + bonus
+        gained_shards = 1 + get_upg("shard_magnet")
+        st.session_state.score += gained_points
+        st.session_state.shards += gained_shards
+        st.session_state.monster_hp = max(0, st.session_state.monster_hp - 1)
+        st.session_state.zap = True
+        st.session_state.last_gain = f"+{gained_points} 🏆  +{gained_shards} 💎"
+        st.session_state.feedback = f"⚡ ZAP! **{chosen_word}** {chosen_emoji} hits {st.session_state.monster_name}!"
+
+        if st.session_state.monster_hp <= 0:
+            rarity, color = roll_rarity()
+            if rarity == "Legendary":
+                st.session_state.stats["legendary_catches"] += 1
+            st.session_state.collection.append({
+                "name": st.session_state.monster_name,
+                "emoji": st.session_state.monster_emoji,
+                "rarity": rarity,
+                "color": color,
+            })
+            st.session_state.last_catch = {
+                "name": st.session_state.monster_name,
+                "emoji": st.session_state.monster_emoji,
+                "rarity": rarity,
+                "color": color,
+            }
+
+        check_achievements()
+        st.session_state.q_index += 1
+        next_question()
+    else:
+        shielded = random.random() < (get_upg("shield_will") * 0.08)
+        if not shielded:
+            st.session_state.energy -= 1
+        st.session_state.streak = 0
+        st.session_state.zap = False
+        st.session_state.last_gain = None
+        note = " (Iron Will protected you!)" if shielded else ""
+        st.session_state.feedback = f"💨 {st.session_state.monster_name} dodges! That was **{st.session_state.current_word}**.{note}"
+        if st.session_state.energy <= 0:
+            st.session_state.screen = "gameover"
+
+def buy_upgrade(key):
+    lvl = st.session_state.upgrade_levels[key]
+    cost = 5 + lvl * 8
+    if lvl < UPGRADE_DEFS[key]["max"] and st.session_state.shards >= cost:
+        st.session_state.shards -= cost
+        st.session_state.upgrade_levels[key] += 1
+        if key == "vital_core":
+            st.session_state.max_energy += 1
+            st.session_state.energy += 1
+        check_achievements()
+
+# ----------------------------------------------------------------------------
+# BOSS ROUND (5 randomized questions: grammar / vocab / rhyme / comprehension)
+# ----------------------------------------------------------------------------
+def build_boss_round():
+    round_types = ["grammar", "vocab", "rhyme", "comprehension", "spelling"]
+    random.shuffle(round_types)
+
+    questions = None
+    if get_gemini_key():
+        with st.spinner("🤖 Summoning the Boss Round..."):
+            questions = generate_ai_boss_round(round_types, wave=st.session_state.wave)
+
+    if not questions:
+        questions = []
+        for t in round_types:
+            pool = [x for x in BOSS_QUESTIONS if x["type"] == t]
+            questions.append(dict(random.choice(pool)))
+
+    random.shuffle(questions)
+    st.session_state.boss_questions = questions
+    st.session_state.boss_index = 0
+    st.session_state.boss_correct = 0
+    st.session_state.boss_choice = None
+    st.session_state.boss_feedback = ""
+    st.session_state.boss_answered = False
+
+def submit_boss_answer(selected_idx):
+    q = st.session_state.boss_questions[st.session_state.boss_index]
+    st.session_state.boss_answered = True
+    st.session_state.boss_choice = selected_idx
+    if selected_idx == q["answer"]:
+        st.session_state.boss_correct += 1
+        gained = 5 + get_upg("shard_magnet")
+        st.session_state.score += 15
+        st.session_state.shards += gained
+        st.session_state.boss_feedback = f"✅ Correct! +15 points, +{gained} shards"
+    else:
+        correct_text = q["options"][q["answer"]]
+        st.session_state.boss_feedback = f"❌ Not quite — the answer was **{correct_text}**"
+
+def boss_next():
+    st.session_state.boss_index += 1
+    st.session_state.boss_choice = None
+    st.session_state.boss_feedback = ""
+    st.session_state.boss_answered = False
+    if st.session_state.boss_index >= len(st.session_state.boss_questions):
+        if st.session_state.boss_correct == len(st.session_state.boss_questions):
+            st.session_state.stats["perfect_boss_rounds"] += 1
+        check_achievements()
+        st.session_state.screen = "shop"
+
+# ----------------------------------------------------------------------------
+# SCREENS
+# ----------------------------------------------------------------------------
+def hud():
+    zone_name, zone_emoji = get_zone(st.session_state.wave)
+    st.markdown(f"""
+    <div class="hud-box">
+    {zone_emoji} ZONE: {zone_name} &nbsp;|&nbsp;
+    ⚡ ENERGY: {'❤️' * st.session_state.energy}{'🖤' * (st.session_state.max_energy - st.session_state.energy)}
+    &nbsp;&nbsp;|&nbsp;&nbsp; 💎 SHARDS: {st.session_state.shards}
+    &nbsp;&nbsp;|&nbsp;&nbsp; 🌊 WAVE: {st.session_state.wave}
+    &nbsp;&nbsp;|&nbsp;&nbsp; 🏆 SCORE: {st.session_state.score}
+    &nbsp;&nbsp;|&nbsp;&nbsp; 🔥 STREAK: {st.session_state.streak}
+    </div>
+    """, unsafe_allow_html=True)
+
+def screen_menu():
+    st.markdown("<h1 style='text-align:center;font-size:52px;'>⭐ STARWORD ⭐</h1>", unsafe_allow_html=True)
+    st.markdown("<h3 style='text-align:center;color:#ff00c8;'>FIVE EXPLORERS</h3>", unsafe_allow_html=True)
+    st.write("")
+    st.markdown("Pick your explorer to begin your reading mission:")
+    cols = st.columns(len(EXPLORERS))
+    for i, (name, cfg) in enumerate(EXPLORERS.items()):
+        with cols[i]:
+            st.markdown("<div style='text-align:center;font-size:44px;'>🚀</div>", unsafe_allow_html=True)
+            st.markdown(f"<div style='text-align:center;color:{cfg['color']};font-weight:800;'>{name}</div>", unsafe_allow_html=True)
+            st.caption(cfg["desc"])
+            if st.button("Choose", key=f"pick_{name}"):
+                st.session_state.explorer = name
+                reset_run()
+                build_wave()
+                st.session_state.screen = "game"
+                st.rerun()
+    st.divider()
+    if st.button("🎙️ Voice Training Chamber (practice reading aloud)"):
+        st.session_state.screen = "read_aloud"
+        st.rerun()
+    c1, c2 = st.columns(2)
+    with c1:
+        if st.button(f"📦 Creatures ({len(st.session_state.collection)})"):
+            st.session_state.screen = "collection"
+            st.rerun()
+    with c2:
+        if st.button(f"🏅 Achievements ({len(st.session_state.achievements)}/{len(ACHIEVEMENTS)})"):
+            st.session_state.screen = "achievements"
+            st.rerun()
+    if get_gemini_key() is None:
+        st.caption("💡 Tip: add a GEMINI_API_KEY in your app's Streamlit secrets to unlock AI-generated boss questions. Works great without it too, using a built-in question bank.")
+
+def screen_game():
+    hud()
+    hp_pct = int(100 * st.session_state.monster_hp / max(1, st.session_state.monster_max_hp))
+    st.markdown(f"""
+    <div class="monster-box">
+        <div style="font-weight:800; letter-spacing:1px;">⚔️ WAVE GUARDIAN: {st.session_state.monster_name}</div>
+        <div class="monster-emoji">{st.session_state.monster_emoji}</div>
+        <div class="hp-bar-bg"><div class="hp-bar-fill" style="width:{hp_pct}%;"></div></div>
+        <div style="font-size:13px;color:#aaa;">{st.session_state.monster_hp} / {st.session_state.monster_max_hp} HP left</div>
+    </div>
+    """, unsafe_allow_html=True)
+    st.session_state.zap = False
+
+    st.markdown(f"### Read the word to attack — Word {st.session_state.q_index + 1} of {len(st.session_state.queue)}")
+    st.markdown(f"<div class='big-word'>{st.session_state.current_word}</div>", unsafe_allow_html=True)
+
+    if get_upg("hint_power") > 0 and st.button("💡 Use Hint"):
+        w = st.session_state.current_word
+        st.info(f"It starts with **'{w[0]}'** and has {len(w)} letters.")
+
+    st.write("Tap the picture that matches the word:")
+    cols = st.columns(4)
+    for i, (word, emoji) in enumerate(st.session_state.options):
+        with cols[i]:
+            if st.button(f"{emoji}", key=f"opt_{i}_{st.session_state.q_index}"):
+                answer_word(word, emoji)
+                st.rerun()
+
+    if st.session_state.last_gain:
+        st.markdown(f"<div class='pop-number' style='color:#50ff50;'>{st.session_state.last_gain}</div>", unsafe_allow_html=True)
+    if st.session_state.feedback:
+        st.markdown(st.session_state.feedback)
+
+def screen_boss():
+    hud()
+    total = len(st.session_state.boss_questions)
+    idx = st.session_state.boss_index
+    q = st.session_state.boss_questions[idx]
+    label, color = TYPE_LABELS.get(q["type"], ("QUESTION", "#fff"))
+
+    st.markdown(f"<div class='boss-tag' style='background:{color}22;color:{color};border:1px solid {color};'>{label}</div>", unsafe_allow_html=True)
+    st.markdown(f"## 🏆 Boss Round — Question {idx + 1} of {total}")
+
+    if q.get("passage"):
+        st.markdown(f"<div class='story-box' style='font-size:20px;'>{q['passage']}</div>", unsafe_allow_html=True)
+
+    st.markdown(f"<div class='big-sentence'>{q['prompt']}</div>", unsafe_allow_html=True)
+
+    if not st.session_state.boss_answered:
+        cols = st.columns(len(q["options"]))
+        for i, opt in enumerate(q["options"]):
+            with cols[i]:
+                if st.button(opt, key=f"boss_opt_{idx}_{i}"):
+                    submit_boss_answer(i)
+                    st.rerun()
+    else:
+        for i, opt in enumerate(q["options"]):
+            tag = ""
+            if i == q["answer"]:
+                tag = " ✅"
+            elif i == st.session_state.boss_choice:
+                tag = " ❌"
+            st.write(f"- {opt}{tag}")
+        st.markdown(st.session_state.boss_feedback)
+        btn_label = "Next Question ➜" if idx + 1 < total else "See Boss Results ➜"
+        if st.button(btn_label):
+            boss_next()
+            st.rerun()
+
+def screen_shop():
+    hud()
+    correct = st.session_state.boss_correct
+    total = len(st.session_state.boss_questions) if st.session_state.boss_questions else 5
+
+    catch = st.session_state.last_catch
+    if catch:
+        st.markdown(f"""
+        <div class="catch-banner">
+            <div style="font-size:76px;">{catch['emoji']}</div>
+            <div style="font-size:22px;font-weight:800;">You caught {catch['name']}!</div>
+            <div class="rarity-badge" style="background:{catch['color']}22;color:{catch['color']};border:1px solid {catch['color']};">{catch['rarity'].upper()}</div>
+        </div>
+        """, unsafe_allow_html=True)
+        if catch["rarity"] in ("Epic", "Legendary"):
+            fire_confetti(["#ffd700", "#b000ff", "#ff3fa4"] if catch["rarity"] == "Legendary" else ["#b000ff", "#00f0ff"])
+        st.session_state.last_catch = None
+
+    if correct == total and total > 0:
+        st.success("💯 Perfect Boss Round!")
+
+    st.markdown(f"## 🎉 Wave cleared! Boss Round: {correct}/{total} correct!")
+    st.markdown("### 🛠️ Star Depot — spend your shards!")
+    for key, upg in UPGRADE_DEFS.items():
+        lvl = st.session_state.upgrade_levels[key]
+        cost = 5 + lvl * 8
+        c1, c2, c3 = st.columns([3, 1, 1])
+        with c1:
+            st.markdown(f"**{upg['name']}** (Lvl {lvl}/{upg['max']})")
+            st.caption(upg["desc"])
+        with c2:
+            st.markdown(f"💎 {cost}" if lvl < upg["max"] else "MAXED")
+        with c3:
+            if lvl < upg["max"]:
+                if st.button("Buy", key=f"buy_{key}"):
+                    buy_upgrade(key)
+                    st.rerun()
+    st.divider()
+    if st.session_state.wave % 3 == 0:
+        if st.button("📖 Continue to Story Challenge ➜"):
+            st.session_state.story_idx = random.randrange(len(STORIES))
+            st.session_state.story_q_idx = 0
+            st.session_state.screen = "story"
+            st.rerun()
+    else:
+        if st.button("🚀 Launch Next Wave ➜"):
+            st.session_state.wave += 1
+            build_wave()
+            st.session_state.screen = "game"
+            st.rerun()
+
+def screen_story():
+    hud()
+    story = STORIES[st.session_state.story_idx]
+    st.markdown(f"## 📖 {story['title']}")
+    st.markdown(f"<div class='story-box'>{story['text']}</div>", unsafe_allow_html=True)
+
+    qi = st.session_state.story_q_idx
+    if qi < len(story["questions"]):
+        q = story["questions"][qi]
+        st.markdown(f"**{q['q']}**")
+        choice = st.radio("Pick one:", q["options"], key=f"story_q_{qi}", index=None)
+        if st.button("Submit Answer"):
+            if choice is not None:
+                if q["options"].index(choice) == q["answer"]:
+                    st.success("✅ Correct! +15 points, +3 shards")
+                    st.session_state.score += 15
+                    st.session_state.shards += 3
+                else:
+                    st.warning(f"Not quite — the answer was **{q['options'][q['answer']]}**")
+                st.session_state.story_q_idx += 1
+                st.rerun()
+    else:
+        st.success("🎉 Story complete!")
+        if st.button("🚀 Launch Next Wave ➜"):
+            st.session_state.wave += 1
+            build_wave()
+            st.session_state.screen = "game"
+            st.rerun()
+
+def screen_gameover():
+    st.markdown("<h1 style='text-align:center;color:#ff3050;'>MISSION PAUSED</h1>", unsafe_allow_html=True)
+    st.markdown(f"<h3 style='text-align:center;'>You reached Wave {st.session_state.wave} with a score of {st.session_state.score}!</h3>", unsafe_allow_html=True)
+    st.balloons()
+    c1, c2 = st.columns(2)
+    with c1:
+        if st.button("🔁 Try Again"):
+            reset_run()
+            build_wave()
+            st.session_state.screen = "game"
+            st.rerun()
+    with c2:
+        if st.button("🏠 Back to Menu"):
+            st.session_state.screen = "menu"
+            st.rerun()
+
+def screen_read_aloud():
+    import streamlit.components.v1 as components
+
+    st.markdown("## 🎙️ Voice Training Chamber")
+    st.write("Pick a line, then either just record & listen back, or let the AI Listener check your reading!")
+    line = st.selectbox("Choose a line to read:", READ_ALOUD_LINES)
+    st.markdown(f"<div class='big-word' style='font-size:34px;'>{line}</div>", unsafe_allow_html=True)
+
+    st.markdown("#### 🎧 AI Listening Check (Chrome or Edge browser)")
+    st.caption("Tap Start, read the sentence out loud, and it will highlight each word it heard.")
+    target_json = json.dumps(line)
+    html = """
+    <div style="font-family:sans-serif;text-align:center;padding:10px;background:#15151f;border-radius:14px;">
+      <button id="startBtn" style="font-size:18px;font-weight:700;padding:12px 24px;border-radius:10px;
+        border:2px solid #00f0ff;background:#0a0a0f;color:#00f0ff;cursor:pointer;">🎤 Start Listening</button>
+      <div id="status" style="margin-top:14px;color:#aaa;font-size:14px;">Tap the button and read the sentence above.</div>
+      <div id="result" style="margin-top:14px;font-size:22px;font-weight:700;"></div>
+      <div id="score" style="margin-top:10px;font-size:16px;color:#50ff50;"></div>
+    </div>
+    <script>
+    const target = TARGET_JSON;
+    const targetWords = target.toLowerCase().replace(/[^a-z0-9 ]/g, "").split(" ").filter(Boolean);
+    const btn = document.getElementById("startBtn");
+    const statusEl = document.getElementById("status");
+    const resultEl = document.getElementById("result");
+    const scoreEl = document.getElementById("score");
+    const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+
+    if (!SpeechRecognition) {
+      statusEl.innerHTML = "⚠️ Speech recognition isn't supported in this browser. Try Chrome or Edge.";
+      btn.disabled = true;
+    } else {
+      const recognition = new SpeechRecognition();
+      recognition.lang = "en-US";
+      recognition.interimResults = false;
+      recognition.maxAlternatives = 1;
+
+      btn.onclick = function() {
+        statusEl.innerHTML = "🔴 Listening... read the sentence now!";
+        resultEl.innerHTML = "";
+        scoreEl.innerHTML = "";
+        try { recognition.start(); } catch (e) {}
+      };
+
+      recognition.onresult = function(event) {
+        const said = event.results[0][0].transcript;
+        const saidWords = said.toLowerCase().replace(/[^a-z0-9 ]/g, "").split(" ").filter(Boolean);
+        let matched = 0;
+        let highlighted = targetWords.map(function(w) {
+          const hit = saidWords.includes(w);
+          if (hit) matched++;
+          const color = hit ? "#50ff50" : "#ff3050";
+          return "<span style='color:" + color + ";margin:0 4px;'>" + w + "</span>";
+        }).join("");
+        resultEl.innerHTML = highlighted;
+        const pct = Math.round((matched / targetWords.length) * 100);
+        let msg = "";
+        if (pct >= 90) { msg = "🌟 Amazing reading! " + pct + "% matched"; }
+        else if (pct >= 60) { msg = "👍 Good try! " + pct + "% matched"; }
+        else { msg = "💪 Keep practicing! " + pct + "% matched"; }
+        scoreEl.innerHTML = msg;
+        statusEl.innerHTML = "Heard: \\"" + said + "\\"";
+      };
+
+      recognition.onerror = function(event) {
+        statusEl.innerHTML = "⚠️ Couldn't hear that — try again (" + event.error + ")";
+      };
+    }
+    </script>
+    """
+    html = html.replace("TARGET_JSON", target_json)
+    components.html(html, height=230)
+
+    st.divider()
+    st.markdown("#### 🎙️ Record & Playback")
+    audio = st.audio_input("Or just record yourself reading it, and listen back")
+    if audio:
+        st.success("Nice reading! Listen back below 👇")
+        st.audio(audio)
+
+    st.divider()
+    if st.button("🏠 Back to Menu"):
+        st.session_state.screen = "menu"
+        st.rerun()
+
+def screen_collection():
+    st.markdown("## 📦 Creature Collection")
+    if not st.session_state.collection:
+        st.info("No creatures caught yet — clear a wave to catch your first one!")
+    else:
+        counts = {}
+        for c in st.session_state.collection:
+            key = (c["name"], c["rarity"])
+            if key not in counts:
+                counts[key] = {"emoji": c["emoji"], "color": c["color"], "count": 0}
+            counts[key]["count"] += 1
+
+        rarity_order = {"Legendary": 0, "Epic": 1, "Rare": 2, "Common": 3}
+        sorted_items = sorted(counts.items(), key=lambda kv: (rarity_order.get(kv[0][1], 9), kv[0][0]))
+
+        cols = st.columns(3)
+        for i, ((name, rarity), info) in enumerate(sorted_items):
+            with cols[i % 3]:
+                st.markdown(f"""
+                <div class="collection-card">
+                    <div style="font-size:52px;">{info['emoji']}</div>
+                    <div style="font-weight:800;">{name}</div>
+                    <div class="rarity-badge" style="background:{info['color']}22;color:{info['color']};border:1px solid {info['color']};">{rarity.upper()}</div>
+                    <div style="color:#aaa;font-size:13px;margin-top:6px;">x{info['count']}</div>
+                </div>
+                """, unsafe_allow_html=True)
+    st.divider()
+    if st.button("🏠 Back to Menu"):
+        st.session_state.screen = "menu"
+        st.rerun()
+
+def screen_achievements():
+    st.markdown(f"## 🏅 Achievements ({len(st.session_state.achievements)}/{len(ACHIEVEMENTS)})")
+    for aid, emoji, name, desc in ACHIEVEMENTS:
+        unlocked = aid in st.session_state.achievements
+        opacity = "1" if unlocked else "0.35"
+        shown_emoji = emoji if unlocked else "🔒"
+        st.markdown(f"""
+        <div class="achievement-card" style="opacity:{opacity};">
+            <div style="font-size:36px;">{shown_emoji}</div>
+            <div>
+                <div style="font-weight:800;">{name}</div>
+                <div style="color:#aaa;font-size:14px;">{desc}</div>
+            </div>
+        </div>
+        """, unsafe_allow_html=True)
+    st.divider()
+    if st.button("🏠 Back to Menu"):
+        st.session_state.screen = "menu"
+        st.rerun()
+
+# ----------------------------------------------------------------------------
+# ROUTER
+# ----------------------------------------------------------------------------
+screens = {
+    "menu": screen_menu,
+    "game": screen_game,
+    "boss": screen_boss,
+    "shop": screen_shop,
+    "story": screen_story,
+    "gameover": screen_gameover,
+    "read_aloud": screen_read_aloud,
+    "collection": screen_collection,
+    "achievements": screen_achievements,
+}
+screens[st.session_state.screen]()
