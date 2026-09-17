@@ -132,15 +132,147 @@ def fire_confetti(colors=None):
     html = html.replace("COLORS_JSON", json.dumps(colors))
     components.html(html, height=120)
 
+def play_sound(kind):
+    import streamlit.components.v1 as components
+    freqs = [660, 880, 1100] if kind == "correct" else [320, 260]
+    html = f"""
+    <script>
+    (function() {{
+        try {{
+            const ctx = new (window.AudioContext || window.webkitAudioContext)();
+            const freqs = {json.dumps(freqs)};
+            let t = ctx.currentTime;
+            freqs.forEach(function(f) {{
+                const osc = ctx.createOscillator();
+                const gain = ctx.createGain();
+                osc.type = 'sine';
+                osc.frequency.value = f;
+                gain.gain.setValueAtTime(0.001, t);
+                gain.gain.exponentialRampToValueAtTime(0.18, t + 0.02);
+                gain.gain.exponentialRampToValueAtTime(0.001, t + 0.16);
+                osc.connect(gain);
+                gain.connect(ctx.destination);
+                osc.start(t);
+                osc.stop(t + 0.18);
+                t += 0.09;
+            }});
+        }} catch (e) {{}}
+    }})();
+    </script>
+    """
+    components.html(html, height=0)
+
+def read_aloud_button(text, key, label="🔊 Read it to me"):
+    """A free, browser-native text-to-speech button (no API key needed) that reads
+    the given text aloud slowly and clearly — helps early/struggling readers."""
+    import streamlit.components.v1 as components
+    text_json = json.dumps(text)
+    html = f"""
+    <div style="text-align:center;">
+      <button id="tts_{key}" style="font-family:'Baloo 2',sans-serif;font-size:16px;font-weight:800;
+        padding:10px 18px;border-radius:12px;border:none;background:linear-gradient(135deg,#00f0ff,#7b2ff7);
+        color:white;cursor:pointer;box-shadow:0 3px 0 #1a4d99;">{label}</button>
+    </div>
+    <script>
+    document.getElementById("tts_{key}").onclick = function() {{
+        const utter = new SpeechSynthesisUtterance({text_json});
+        utter.rate = 0.85;
+        utter.pitch = 1.1;
+        utter.lang = "en-US";
+        window.speechSynthesis.cancel();
+        window.speechSynthesis.speak(utter);
+    }};
+    </script>
+    """
+    components.html(html, height=54)
+
+def daily_streak_widget():
+    """Client-side (localStorage) daily streak counter — entirely in the browser,
+    no server/database needed. Encourages coming back every day, Duolingo-style."""
+    import streamlit.components.v1 as components
+    html = """
+    <div id="streak-box" style="text-align:center;font-family:'Baloo 2',sans-serif;
+        background:linear-gradient(135deg,#ff3fa4,#7b2ff7);border-radius:16px;padding:14px;margin-bottom:6px;">
+      <div id="streak-text" style="font-size:22px;font-weight:800;color:white;"></div>
+      <div id="streak-sub" style="font-size:13px;color:#ffffffcc;"></div>
+    </div>
+    <script>
+    (function() {
+        const todayStr = new Date().toDateString();
+        const last = localStorage.getItem('starword_last_visit');
+        let streak = parseInt(localStorage.getItem('starword_streak') || '0');
+        if (last === todayStr) {
+            // already counted today
+        } else {
+            const yesterday = new Date();
+            yesterday.setDate(yesterday.getDate() - 1);
+            if (last === yesterday.toDateString()) {
+                streak += 1;
+            } else {
+                streak = 1;
+            }
+            localStorage.setItem('starword_last_visit', todayStr);
+            localStorage.setItem('starword_streak', streak.toString());
+        }
+        document.getElementById('streak-text').innerHTML = "🔥 " + streak + " Day Streak!";
+        const msgs = ["Keep it going!", "You're on a roll!", "Come back tomorrow to grow it!", "Amazing consistency!"];
+        document.getElementById('streak-sub').innerHTML = msgs[Math.min(streak - 1, msgs.length - 1)] || "Let's start a streak!";
+    })();
+    </script>
+    """
+    components.html(html, height=90)
+
+# ----------------------------------------------------------------------------
+# COMPANION "STAR SPRITE" — a pet that grows as your kid reads more, Tamagotchi-style
+# ----------------------------------------------------------------------------
+BUDDY_STAGES = [
+    (0, "Star Egg", "🥚", "Still asleep... read some words to help me hatch!"),
+    (150, "Star Sprite", "✨", "I hatched! Thank you for reading with me."),
+    (500, "Comet Pup", "🌠", "I'm zooming around now — you're doing great!"),
+    (1500, "Star Guardian", "🌟", "Look how far we've come together!"),
+    (4000, "Cosmic Champion", "🪐", "We make an unstoppable reading team!"),
+]
+
+def get_buddy_stage(lifetime_score):
+    stage = BUDDY_STAGES[0]
+    for threshold, name, emoji, msg in BUDDY_STAGES:
+        if lifetime_score >= threshold:
+            stage = (threshold, name, emoji, msg)
+    return stage
+
+def buddy_widget():
+    lifetime = st.session_state.lifetime_score
+    idx = 0
+    for i, (threshold, name, emoji, msg) in enumerate(BUDDY_STAGES):
+        if lifetime >= threshold:
+            idx = i
+    threshold, name, emoji, msg = BUDDY_STAGES[idx]
+    if idx + 1 < len(BUDDY_STAGES):
+        next_threshold = BUDDY_STAGES[idx + 1][0]
+        progress = int(100 * (lifetime - threshold) / max(1, next_threshold - threshold))
+        progress_text = f"{lifetime - threshold} / {next_threshold - threshold} XP to next stage"
+    else:
+        progress = 100
+        progress_text = "Max stage reached! 🎉"
+    st.markdown(f"""
+    <div class="collection-card" style="margin-bottom:14px;">
+        <div style="font-size:64px;">{emoji}</div>
+        <div style="font-weight:800;font-size:18px;">{name}</div>
+        <div style="color:#aaa;font-size:13px;margin-bottom:8px;">{msg}</div>
+        <div class="hp-bar-bg" style="width:200px;"><div class="hp-bar-fill" style="width:{progress}%;background:linear-gradient(90deg,#00f0ff,#7b2ff7);"></div></div>
+        <div style="color:#aaa;font-size:12px;margin-top:4px;">{progress_text}</div>
+    </div>
+    """, unsafe_allow_html=True)
+
 # ----------------------------------------------------------------------------
 # GAME DATA
 # ----------------------------------------------------------------------------
 EXPLORERS = {
-    "COMET CAT":     {"power": "STAR CLAWS",      "color": "#FF3050", "desc": "Fast and fearless — great streak bonuses."},
-    "STAR GUARDIAN": {"power": "AURORA STAFF",    "color": "#00F0FF", "desc": "Steady and wise — extra energy to start."},
-    "GEAR BOT":      {"power": "SPARK WRENCH",    "color": "#50FF50", "desc": "Loves gadgets — earns bonus shards."},
-    "SHADOW FOX":    {"power": "MOON DAGGER",     "color": "#FF00C8", "desc": "Sneaky and quick — extra hints."},
-    "NOVA DRIFTER":  {"power": "SINGULARITY ORB", "color": "#B000FF", "desc": "Calm explorer — shields against mistakes."},
+    "COMET CAT":     {"power": "STAR CLAWS",      "color": "#FF3050", "desc": "Fast and fearless — +15% bonus points on streaks."},
+    "STAR GUARDIAN": {"power": "AURORA STAFF",    "color": "#00F0FF", "desc": "Steady and wise — starts with +2 max energy."},
+    "GEAR BOT":      {"power": "SPARK WRENCH",    "color": "#50FF50", "desc": "Loves gadgets — always earns +1 bonus shard."},
+    "SHADOW FOX":    {"power": "MOON DAGGER",     "color": "#FF00C8", "desc": "Sneaky and quick — starts with a free Hint Beacon."},
+    "NOVA DRIFTER":  {"power": "SINGULARITY ORB", "color": "#B000FF", "desc": "Calm explorer — +10% chance to shrug off a wrong answer."},
 }
 
 UPGRADE_DEFS = {
@@ -643,6 +775,12 @@ def init_state():
         "achievements": [],
         "stats": {"words_correct": 0, "perfect_boss_rounds": 0, "best_streak": 0, "legendary_catches": 0},
         "upgrade_levels": {k: 0 for k in UPGRADE_DEFS},
+        "lifetime_score": 0,
+        "missed_words": set(),
+        "sound_to_play": None,
+        "practice_queue": [],
+        "practice_index": 0,
+        "practice_options": [],
     }
     for k, v in defaults.items():
         if k not in st.session_state:
@@ -653,9 +791,21 @@ init_state()
 def get_upg(key):
     return st.session_state.upgrade_levels[key]
 
+def is_class(name):
+    return st.session_state.explorer == name
+
+def effective_hint_level():
+    return get_upg("hint_power") + (1 if is_class("SHADOW FOX") else 0)
+
+def effective_shield_chance():
+    return get_upg("shield_will") * 0.08 + (0.10 if is_class("NOVA DRIFTER") else 0)
+
+def effective_streak_mult():
+    return 1 + get_upg("streak_focus") * 0.1 + (0.15 if is_class("COMET CAT") else 0)
+
 def reset_run():
     st.session_state.wave = 1
-    st.session_state.max_energy = 5 + get_upg("vital_core")
+    st.session_state.max_energy = 5 + get_upg("vital_core") + (2 if is_class("STAR GUARDIAN") else 0)
     st.session_state.energy = st.session_state.max_energy
     st.session_state.shards = 0
     st.session_state.score = 0
@@ -699,15 +849,20 @@ def answer_word(chosen_word, chosen_emoji):
         st.session_state.streak += 1
         st.session_state.stats["best_streak"] = max(st.session_state.stats["best_streak"], st.session_state.streak)
         st.session_state.stats["words_correct"] += 1
-        bonus = int(st.session_state.streak * (1 + get_upg("streak_focus") * 0.1))
+        if st.session_state.streak in (3, 5, 10, 15, 20):
+            st.toast(f"🔥 {st.session_state.streak} in a row! You're on fire!", icon="🔥")
+        bonus = int(st.session_state.streak * effective_streak_mult())
         gained_points = 10 + bonus
-        gained_shards = 1 + get_upg("shard_magnet")
+        gained_shards = 1 + get_upg("shard_magnet") + (1 if is_class("GEAR BOT") else 0)
         st.session_state.score += gained_points
+        st.session_state.lifetime_score += gained_points
         st.session_state.shards += gained_shards
         st.session_state.monster_hp = max(0, st.session_state.monster_hp - 1)
         st.session_state.zap = True
+        st.session_state.sound_to_play = "correct"
         st.session_state.last_gain = f"+{gained_points} 🏆  +{gained_shards} 💎"
         st.session_state.feedback = f"⚡ ZAP! **{chosen_word}** {chosen_emoji} hits {st.session_state.monster_name}!"
+        st.session_state.missed_words.discard(st.session_state.current_word)
 
         if st.session_state.monster_hp <= 0:
             rarity, color = roll_rarity()
@@ -730,16 +885,55 @@ def answer_word(chosen_word, chosen_emoji):
         st.session_state.q_index += 1
         next_question()
     else:
-        shielded = random.random() < (get_upg("shield_will") * 0.08)
+        shielded = random.random() < effective_shield_chance()
         if not shielded:
             st.session_state.energy -= 1
         st.session_state.streak = 0
         st.session_state.zap = False
+        st.session_state.sound_to_play = "wrong"
         st.session_state.last_gain = None
+        st.session_state.missed_words.add(st.session_state.current_word)
         note = " (Iron Will protected you!)" if shielded else ""
         st.session_state.feedback = f"💨 {st.session_state.monster_name} dodges! That was **{st.session_state.current_word}**.{note}"
         if st.session_state.energy <= 0:
             st.session_state.screen = "gameover"
+
+# ----------------------------------------------------------------------------
+# TRICKY WORDS PRACTICE — adaptive, low-pressure review of words your kid has
+# gotten wrong before. This is the single most evidence-backed feature here:
+# research on personalized/adaptive practice shows meaningfully better learning
+# outcomes than one-size-fits-all repetition.
+# ----------------------------------------------------------------------------
+def build_practice_round():
+    all_words = WORD_BANK + HARDER_WORDS
+    lookup = {w: e for w, e in all_words}
+    queue = [(w, lookup[w]) for w in st.session_state.missed_words if w in lookup]
+    random.shuffle(queue)
+    st.session_state.practice_queue = queue
+    st.session_state.practice_index = 0
+    next_practice_question()
+
+def next_practice_question():
+    if st.session_state.practice_index >= len(st.session_state.practice_queue):
+        return
+    word, emoji = st.session_state.practice_queue[st.session_state.practice_index]
+    all_words = WORD_BANK + HARDER_WORDS
+    wrong = random.sample([w for w in all_words if w[0] != word], 3)
+    opts = wrong + [(word, emoji)]
+    random.shuffle(opts)
+    st.session_state.practice_options = opts
+
+def answer_practice(chosen_word, correct_word):
+    if chosen_word == correct_word:
+        st.session_state.missed_words.discard(correct_word)
+        st.session_state.shards += 1
+        st.session_state.lifetime_score += 5
+        st.session_state.sound_to_play = "correct"
+        st.toast("Mastered it! 🌟", icon="✅")
+    else:
+        st.session_state.sound_to_play = "wrong"
+    st.session_state.practice_index += 1
+    next_practice_question()
 
 def buy_upgrade(key):
     lvl = st.session_state.upgrade_levels[key]
@@ -786,10 +980,13 @@ def submit_boss_answer(selected_idx):
         st.session_state.boss_correct += 1
         gained = 5 + get_upg("shard_magnet")
         st.session_state.score += 15
+        st.session_state.lifetime_score += 15
         st.session_state.shards += gained
+        st.session_state.sound_to_play = "correct"
         st.session_state.boss_feedback = f"✅ Correct! +15 points, +{gained} shards"
     else:
         correct_text = q["options"][q["answer"]]
+        st.session_state.sound_to_play = "wrong"
         st.session_state.boss_feedback = f"❌ Not quite — the answer was **{correct_text}**"
 
 def boss_next():
@@ -820,9 +1017,11 @@ def hud():
     """, unsafe_allow_html=True)
 
 def screen_menu():
+    daily_streak_widget()
     st.markdown("<h1 style='text-align:center;font-size:52px;'>⭐ STARWORD ⭐</h1>", unsafe_allow_html=True)
     st.markdown("<h3 style='text-align:center;color:#ff00c8;'>FIVE EXPLORERS</h3>", unsafe_allow_html=True)
     st.write("")
+    buddy_widget()
     st.markdown("Pick your explorer to begin your reading mission:")
     cols = st.columns(len(EXPLORERS))
     for i, (name, cfg) in enumerate(EXPLORERS.items()):
@@ -840,6 +1039,11 @@ def screen_menu():
     if st.button("🎙️ Voice Training Chamber (practice reading aloud)"):
         st.session_state.screen = "read_aloud"
         st.rerun()
+    if st.session_state.missed_words:
+        if st.button(f"🔁 Practice Tricky Words ({len(st.session_state.missed_words)})"):
+            build_practice_round()
+            st.session_state.screen = "practice"
+            st.rerun()
     c1, c2 = st.columns(2)
     with c1:
         if st.button(f"📦 Creatures ({len(st.session_state.collection)})"):
@@ -849,6 +1053,9 @@ def screen_menu():
         if st.button(f"🏅 Achievements ({len(st.session_state.achievements)}/{len(ACHIEVEMENTS)})"):
             st.session_state.screen = "achievements"
             st.rerun()
+    if st.button("📊 Progress Report (for grown-ups)"):
+        st.session_state.screen = "progress"
+        st.rerun()
     if get_gemini_key() is None:
         st.caption("💡 Tip: add a GEMINI_API_KEY in your app's Streamlit secrets to unlock AI-generated boss questions. Works great without it too, using a built-in question bank.")
 
@@ -865,12 +1072,18 @@ def screen_game():
     """, unsafe_allow_html=True)
     st.session_state.zap = False
 
+    if st.session_state.monster_hp == 1:
+        st.markdown(f"<div style='text-align:center;color:#ff9050;font-weight:800;font-size:18px;'>🔥 One more hit! Finish off {st.session_state.monster_name}!</div>", unsafe_allow_html=True)
+
     st.markdown(f"### Read the word to attack — Word {st.session_state.q_index + 1} of {len(st.session_state.queue)}")
     st.markdown(f"<div class='big-word'>{st.session_state.current_word}</div>", unsafe_allow_html=True)
+    read_aloud_button(st.session_state.current_word, key=f"word_{st.session_state.q_index}")
 
-    if get_upg("hint_power") > 0 and st.button("💡 Use Hint"):
+    hint_lvl = effective_hint_level()
+    if hint_lvl > 0 and st.button("💡 Use Hint"):
         w = st.session_state.current_word
-        st.info(f"It starts with **'{w[0]}'** and has {len(w)} letters.")
+        reveal = min(len(w) - 1, hint_lvl)
+        st.info(f"It has {len(w)} letters and starts with **'{w[:reveal]}...'**")
 
     st.write("Tap the picture that matches the word:")
     cols = st.columns(4)
@@ -884,6 +1097,9 @@ def screen_game():
         st.markdown(f"<div class='pop-number' style='color:#50ff50;'>{st.session_state.last_gain}</div>", unsafe_allow_html=True)
     if st.session_state.feedback:
         st.markdown(st.session_state.feedback)
+    if st.session_state.sound_to_play:
+        play_sound(st.session_state.sound_to_play)
+        st.session_state.sound_to_play = None
 
 def screen_boss():
     hud()
@@ -894,11 +1110,15 @@ def screen_boss():
 
     st.markdown(f"<div class='boss-tag' style='background:{color}22;color:{color};border:1px solid {color};'>{label}</div>", unsafe_allow_html=True)
     st.markdown(f"## 🏆 Boss Round — Question {idx + 1} of {total}")
+    if idx == total - 1:
+        st.markdown("<div style='text-align:center;color:#ffd23f;font-weight:800;'>🏁 Last question — finish strong!</div>", unsafe_allow_html=True)
 
     if q.get("passage"):
         st.markdown(f"<div class='story-box' style='font-size:20px;'>{q['passage']}</div>", unsafe_allow_html=True)
+        read_aloud_button(q["passage"], key=f"boss_passage_{idx}", label="🔊 Read the story to me")
 
     st.markdown(f"<div class='big-sentence'>{q['prompt']}</div>", unsafe_allow_html=True)
+    read_aloud_button(q["prompt"], key=f"boss_prompt_{idx}")
 
     if not st.session_state.boss_answered:
         cols = st.columns(len(q["options"]))
@@ -916,6 +1136,9 @@ def screen_boss():
                 tag = " ❌"
             st.write(f"- {opt}{tag}")
         st.markdown(st.session_state.boss_feedback)
+        if st.session_state.sound_to_play:
+            play_sound(st.session_state.sound_to_play)
+            st.session_state.sound_to_play = None
         btn_label = "Next Question ➜" if idx + 1 < total else "See Boss Results ➜"
         if st.button(btn_label):
             boss_next()
@@ -977,6 +1200,7 @@ def screen_story():
     story = STORIES[st.session_state.story_idx]
     st.markdown(f"## 📖 {story['title']}")
     st.markdown(f"<div class='story-box'>{story['text']}</div>", unsafe_allow_html=True)
+    read_aloud_button(story["text"], key=f"story_{st.session_state.story_idx}", label="🔊 Read the story to me")
 
     qi = st.session_state.story_q_idx
     if qi < len(story["questions"]):
@@ -988,6 +1212,7 @@ def screen_story():
                 if q["options"].index(choice) == q["answer"]:
                     st.success("✅ Correct! +15 points, +3 shards")
                     st.session_state.score += 15
+                    st.session_state.lifetime_score += 15
                     st.session_state.shards += 3
                 else:
                     st.warning(f"Not quite — the answer was **{q['options'][q['answer']]}**")
@@ -1024,6 +1249,7 @@ def screen_read_aloud():
     st.write("Pick a line, then either just record & listen back, or let the AI Listener check your reading!")
     line = st.selectbox("Choose a line to read:", READ_ALOUD_LINES)
     st.markdown(f"<div class='big-word' style='font-size:34px;'>{line}</div>", unsafe_allow_html=True)
+    read_aloud_button(line, key="voice_chamber_line", label="🔊 Hear it first")
 
     st.markdown("#### 🎧 AI Listening Check (Chrome or Edge browser)")
     st.caption("Tap Start, read the sentence out loud, and it will highlight each word it heard.")
@@ -1153,6 +1379,76 @@ def screen_achievements():
         st.session_state.screen = "menu"
         st.rerun()
 
+def screen_practice():
+    st.markdown("## 🔁 Tricky Words Practice")
+    st.caption("Low-pressure review — no energy lost here, just extra reps on words you've missed before. This is the single best thing for actually locking in new vocabulary.")
+
+    if st.session_state.practice_index >= len(st.session_state.practice_queue):
+        st.success(f"🎉 Practice round complete! {len(st.session_state.missed_words)} word(s) still need more practice." if st.session_state.missed_words else "🌟 All tricky words mastered — amazing work!")
+        if st.session_state.sound_to_play:
+            play_sound(st.session_state.sound_to_play)
+            st.session_state.sound_to_play = None
+        if st.button("🏠 Back to Menu"):
+            st.session_state.screen = "menu"
+            st.rerun()
+        return
+
+    word, emoji = st.session_state.practice_queue[st.session_state.practice_index]
+    st.markdown(f"### Word {st.session_state.practice_index + 1} of {len(st.session_state.practice_queue)}")
+    st.markdown(f"<div class='big-word'>{word}</div>", unsafe_allow_html=True)
+    read_aloud_button(word, key=f"practice_{st.session_state.practice_index}")
+
+    st.write("Tap the picture that matches the word:")
+    cols = st.columns(4)
+    for i, (w, e) in enumerate(st.session_state.practice_options):
+        with cols[i]:
+            if st.button(f"{e}", key=f"practice_opt_{i}_{st.session_state.practice_index}"):
+                answer_practice(w, word)
+                st.rerun()
+
+    if st.session_state.sound_to_play:
+        play_sound(st.session_state.sound_to_play)
+        st.session_state.sound_to_play = None
+
+def screen_progress():
+    st.markdown("## 📊 Progress Report")
+    st.caption("A quick snapshot for grown-ups — everything here lives only in this browser session.")
+
+    s = st.session_state.stats
+    c1, c2, c3 = st.columns(3)
+    c1.metric("Words read correctly", s["words_correct"])
+    c2.metric("Best streak", s["best_streak"])
+    c3.metric("Perfect Boss Rounds", s["perfect_boss_rounds"])
+
+    c4, c5, c6 = st.columns(3)
+    c4.metric("Creatures caught", len(st.session_state.collection))
+    c5.metric("Legendary catches", s["legendary_catches"])
+    c6.metric("Achievements", f"{len(st.session_state.achievements)}/{len(ACHIEVEMENTS)}")
+
+    st.divider()
+    st.markdown("#### Words that need more practice")
+    if st.session_state.missed_words:
+        st.write(", ".join(sorted(st.session_state.missed_words)))
+        st.caption("These show up automatically in '🔁 Practice Tricky Words' on the main menu.")
+    else:
+        st.write("None right now — great job! Keep playing to surface new ones as harder words appear.")
+
+    st.divider()
+    st.markdown("#### Tips for grown-ups (based on learning-app research)")
+    st.markdown("""
+- A few short sessions across the week beat one long session — the words that stick
+  are the ones revisited over time, which is exactly what Tricky Words Practice is for.
+- Sitting with your kid occasionally and asking them to read a word or sentence
+  out loud to *you* reinforces it far more than solo play.
+- If a wave feels frustrating, it's fine to stay on an easier Star Zone for a while —
+  confidence matters as much as difficulty.
+    """)
+
+    st.divider()
+    if st.button("🏠 Back to Menu"):
+        st.session_state.screen = "menu"
+        st.rerun()
+
 # ----------------------------------------------------------------------------
 # ROUTER
 # ----------------------------------------------------------------------------
@@ -1166,5 +1462,7 @@ screens = {
     "read_aloud": screen_read_aloud,
     "collection": screen_collection,
     "achievements": screen_achievements,
+    "practice": screen_practice,
+    "progress": screen_progress,
 }
 screens[st.session_state.screen]()
