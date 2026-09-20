@@ -45,6 +45,16 @@ h1, h2, h3, p, label, span, div { color: #f5f5ff; }
     0%, 100% { transform: translateY(0px); }
     50% { transform: translateY(-8px); }
 }
+@keyframes twinkle {
+    0%, 100% { opacity: 0.25; transform: scale(0.9); }
+    50% { opacity: 1; transform: scale(1.15); }
+}
+.twinkle-row { text-align:center; font-size:20px; letter-spacing:10px; margin: 4px 0 10px 0; }
+.twinkle-row span { display:inline-block; animation: twinkle 2.2s ease-in-out infinite; }
+.twinkle-row span:nth-child(2) { animation-delay: 0.4s; }
+.twinkle-row span:nth-child(3) { animation-delay: 0.8s; }
+.twinkle-row span:nth-child(4) { animation-delay: 1.2s; }
+.twinkle-row span:nth-child(5) { animation-delay: 1.6s; }
 .monster-box { text-align: center; padding: 10px 0 4px 0; }
 .monster-emoji { font-size: 100px; animation: zapshake 0.4s ease-in-out, floaty 3s ease-in-out infinite; display:inline-block; }
 .hp-bar-bg {
@@ -486,6 +496,21 @@ BOSS_QUESTIONS = [
     {"type": "spelling", "prompt": "Which word is spelled correctly?", "options": ["scool", "school", "shcool"], "answer": 1},
     {"type": "spelling", "prompt": "Which word is spelled correctly?", "options": ["aminal", "animal", "annimal"], "answer": 1},
     {"type": "spelling", "prompt": "Which word is spelled correctly?", "options": ["buetiful", "beautiful", "beatiful"], "answer": 1},
+    {"type": "logic", "prompt": "What comes next? 🔴🔵🔴🔵🔴 ___", "options": ["🔵", "🔴", "🟢"], "answer": 0},
+    {"type": "logic", "prompt": "What comes next? 🟦🟦🟨🟦🟦🟨 ___", "options": ["🟨", "🟦", "🟪"], "answer": 0},
+    {"type": "logic", "prompt": "Which one is different?", "options": ["🐶", "🐱", "🚗"], "answer": 2},
+    {"type": "logic", "prompt": "Which one is different?", "options": ["🍎", "🍌", "⚽"], "answer": 2},
+    {"type": "logic", "prompt": "Cat is to Kitten as Dog is to ___?", "options": ["Puppy", "Bird", "Cow"], "answer": 0},
+    {"type": "logic", "prompt": "Bird is to Fly as Fish is to ___?", "options": ["Swim", "Walk", "Sleep"], "answer": 0},
+    {"type": "logic", "prompt": "You wake up, get dressed, then eat breakfast. What do you do first?", "options": ["Get dressed", "Wake up", "Eat breakfast"], "answer": 1},
+    {"type": "logic", "prompt": "First you plant a seed, then it grows, then it blooms. What happens first?", "options": ["It blooms", "It grows", "You plant a seed"], "answer": 2},
+    {"type": "logic", "prompt": "If it rains, the ground gets ___?", "options": ["Wet", "Dry", "Hot"], "answer": 0},
+    {"type": "logic", "prompt": "If the sun goes down, it becomes ___?", "options": ["Night", "Morning", "Noon"], "answer": 0},
+    {"type": "logic", "prompt": "Which one is a fruit?", "options": ["Apple", "Chair", "Car"], "answer": 0},
+    {"type": "logic", "prompt": "Which one is bigger?", "options": ["Elephant", "Mouse", "Ant"], "answer": 0},
+    {"type": "logic", "prompt": "Which one can you eat?", "options": ["Pizza", "Rock", "Pencil"], "answer": 0},
+    {"type": "logic", "prompt": "Which one flies in the sky?", "options": ["Airplane", "Fish", "Car"], "answer": 0},
+    {"type": "logic", "prompt": "What comes next? 1 leaf, 2 leaves, 3 leaves, ___ leaves?", "options": ["4", "2", "10"], "answer": 0},
 ]
 
 STORIES = [
@@ -640,6 +665,7 @@ TYPE_LABELS = {
     "rhyme": ("🎵 RHYME TIME", "#FF00C8"),
     "comprehension": ("🧠 COMPREHENSION", "#FF9050"),
     "spelling": ("🔤 SPELLING", "#FFD23F"),
+    "logic": ("🧩 LOGIC PUZZLE", "#7B2FF7"),
     "word": ("🔤 WORD MATCH", "#50FF50"),
 }
 
@@ -651,16 +677,33 @@ MOVES = [
     {"id": "grammar_bolt", "name": "📐 Grammar Bolt", "unlock_wave": 4, "qtype": "grammar", "desc": "Zap with correct grammar."},
     {"id": "vocab_beam", "name": "📖 Vocab Beam", "unlock_wave": 6, "qtype": "vocab", "desc": "Blast with word meanings."},
     {"id": "spelling_strike", "name": "✍️ Spelling Strike", "unlock_wave": 8, "qtype": "spelling", "desc": "Strike with perfect spelling."},
+    {"id": "logic_pulse", "name": "🧩 Logic Pulse", "unlock_wave": 10, "qtype": "logic", "desc": "Solve a pattern or puzzle."},
 ]
 
 def unlocked_moves():
     return [m for m in MOVES if st.session_state.wave >= m["unlock_wave"]]
 
-# Map tiles: only "grass" tiles have a chance of a wild encounter, like Pokémon's tall grass
-MAP_TILE_GRASS = "🌾"
-MAP_TILE_PATH = ["🟫", "🟩", "🪨", "🌸"]
+# Map tiles: only "grass" tiles have a chance of a wild encounter, like Pokémon's tall grass.
+# Each zone gets its own themed tile palette for visual variety.
+MAP_TILE_REST = "💊"
 GRID_SIZE = 5
 ENCOUNTER_CHANCE = 0.4
+
+ZONE_TILES = {
+    "Nebula Fields": {"grass": "🌾", "path": ["🟫", "🟩", "🪨", "🌸"]},
+    "Frozen Moons": {"grass": "❄️", "path": ["🧊", "⬜", "🌨️", "🥶"]},
+    "Lava Belt": {"grass": "🔥", "path": ["🟥", "🌋", "⬛", "🪨"]},
+    "Crystal Caverns": {"grass": "💎", "path": ["🟪", "⬛", "🔮", "🪨"]},
+    "Deep Space Frontier": {"grass": "🌠", "path": ["⬛", "🌌", "🪐", "⭐"]},
+}
+
+ZONE_COLORS = {
+    "Nebula Fields": "#7B2FF7",
+    "Frozen Moons": "#00F0FF",
+    "Lava Belt": "#FF3050",
+    "Crystal Caverns": "#B000FF",
+    "Deep Space Frontier": "#FFD23F",
+}
 
 ZONES = [
     (1, 5, "Nebula Fields", "🌌"),
@@ -669,6 +712,14 @@ ZONES = [
     (16, 20, "Crystal Caverns", "💎"),
     (21, 10**9, "Deep Space Frontier", "🌠"),
 ]
+
+GYM_LEADERS = {
+    "Nebula Fields": {"leader": "Leader Comet", "leader_emoji": "🧑‍🚀", "badge_emoji": "🥇", "badge_name": "Nebula Badge"},
+    "Frozen Moons": {"leader": "Leader Frost", "leader_emoji": "🧊", "badge_emoji": "🥈", "badge_name": "Frost Badge"},
+    "Lava Belt": {"leader": "Leader Ember", "leader_emoji": "🌋", "badge_emoji": "🥉", "badge_name": "Ember Badge"},
+    "Crystal Caverns": {"leader": "Leader Prism", "leader_emoji": "💎", "badge_emoji": "🏅", "badge_name": "Prism Badge"},
+    "Deep Space Frontier": {"leader": "Leader Nova", "leader_emoji": "🌠", "badge_emoji": "🎖️", "badge_name": "Nova Badge"},
+}
 
 def get_zone(wave):
     for lo, hi, name, emoji in ZONES:
@@ -748,6 +799,7 @@ def generate_ai_boss_round(round_types, wave=1):
         "rhyme": "a question asking which word rhymes with a given simple word",
         "comprehension": "a 1-2 sentence mini story ('passage') followed by a simple comprehension question about it",
         "spelling": "a question asking which of 3 spellings of a common word is correct (2 should be plausible misspellings)",
+        "logic": "a simple logic puzzle for a 7-year-old: a pattern to complete, an odd-one-out, a simple analogy (A is to B as C is to ___), a sequencing question (what happens first), or a cause-and-effect question",
     }
     items_desc = "\n".join(
         f'{i + 1}. type="{t}": {type_instructions.get(t, type_instructions["vocab"])}'
@@ -837,6 +889,9 @@ def init_state():
         "battle_mcq": None,
         "catch_pending": False,
         "catch_result": None,
+        "catch_confetti_shown": False,
+        "badges": [],
+        "new_badge": None,
     }
     for k, v in defaults.items():
         if k not in st.session_state:
@@ -884,6 +939,7 @@ def build_encounter():
     st.session_state.battle_mcq = None
     st.session_state.catch_pending = False
     st.session_state.catch_result = None
+    st.session_state.catch_confetti_shown = False
     check_achievements()
 
 def choose_move(move):
@@ -946,6 +1002,7 @@ def resolve_battle_answer(correct, label=""):
             st.session_state.screen = "gameover"
 
 def attempt_catch():
+    st.session_state.catch_confetti_shown = False
     success = random.random() < 0.7
     if success:
         rarity, color = roll_rarity()
@@ -974,15 +1031,21 @@ def attempt_catch():
 def ensure_map():
     zone_name, _ = get_zone(st.session_state.wave)
     if st.session_state.map_zone_name != zone_name or not st.session_state.map_grid:
+        palette = ZONE_TILES.get(zone_name, ZONE_TILES["Nebula Fields"])
         grid = []
         for _ in range(GRID_SIZE):
             row = []
             for _ in range(GRID_SIZE):
-                row.append(MAP_TILE_GRASS if random.random() < 0.55 else random.choice(MAP_TILE_PATH))
+                row.append(palette["grass"] if random.random() < 0.55 else random.choice(palette["path"]))
             grid.append(row)
+        start = [GRID_SIZE // 2, GRID_SIZE // 2]
+        rest_r, rest_c = start
+        while [rest_r, rest_c] == start:
+            rest_r, rest_c = random.randrange(GRID_SIZE), random.randrange(GRID_SIZE)
+        grid[rest_r][rest_c] = MAP_TILE_REST
         st.session_state.map_grid = grid
         st.session_state.map_zone_name = zone_name
-        st.session_state.map_pos = [GRID_SIZE // 2, GRID_SIZE // 2]
+        st.session_state.map_pos = start
 
 def move_player(dr, dc):
     r, c = st.session_state.map_pos
@@ -990,7 +1053,12 @@ def move_player(dr, dc):
     if 0 <= nr < GRID_SIZE and 0 <= nc < GRID_SIZE:
         st.session_state.map_pos = [nr, nc]
         tile = st.session_state.map_grid[nr][nc]
-        if tile == MAP_TILE_GRASS and random.random() < ENCOUNTER_CHANCE:
+        zone_name, _ = get_zone(st.session_state.wave)
+        grass_tile = ZONE_TILES.get(zone_name, ZONE_TILES["Nebula Fields"])["grass"]
+        if tile == MAP_TILE_REST and st.session_state.energy < st.session_state.max_energy:
+            st.session_state.energy = st.session_state.max_energy
+            st.toast("😌 Waystation! Energy fully restored.", icon="💊")
+        elif tile == grass_tile and random.random() < ENCOUNTER_CHANCE:
             build_encounter()
             st.session_state.screen = "battle"
 
@@ -1046,12 +1114,12 @@ def buy_upgrade(key):
 # BOSS ROUND (5 randomized questions: grammar / vocab / rhyme / comprehension)
 # ----------------------------------------------------------------------------
 def build_boss_round():
-    round_types = ["grammar", "vocab", "rhyme", "comprehension", "spelling"]
-    random.shuffle(round_types)
+    available_types = ["grammar", "vocab", "rhyme", "comprehension", "spelling", "logic"]
+    round_types = random.sample(available_types, 5)
 
     questions = None
     if get_gemini_key():
-        with st.spinner("🤖 Summoning the Boss Round..."):
+        with st.spinner("🤖 Summoning the Gym Battle..."):
             questions = generate_ai_boss_round(round_types, wave=st.session_state.wave)
 
     if not questions:
@@ -1091,8 +1159,15 @@ def boss_next():
     st.session_state.boss_feedback = ""
     st.session_state.boss_answered = False
     if st.session_state.boss_index >= len(st.session_state.boss_questions):
-        if st.session_state.boss_correct == len(st.session_state.boss_questions):
+        total = len(st.session_state.boss_questions)
+        if st.session_state.boss_correct == total:
             st.session_state.stats["perfect_boss_rounds"] += 1
+        zone_name, _ = get_zone(st.session_state.wave)
+        if st.session_state.boss_correct >= max(3, total - 1) and zone_name not in st.session_state.badges:
+            st.session_state.badges.append(zone_name)
+            info = GYM_LEADERS.get(zone_name)
+            if info:
+                st.session_state.new_badge = {"zone": zone_name, **info}
         check_achievements()
         st.session_state.screen = "shop"
 
@@ -1125,6 +1200,7 @@ def screen_menu():
         fire_confetti(["#00f0ff", "#7b2ff7", "#ffd23f"])
         st.session_state.evolution_banner = None
     st.markdown("<h1 style='text-align:center;font-size:52px;'>⭐ STARWORD ⭐</h1>", unsafe_allow_html=True)
+    st.markdown("<div class='twinkle-row'><span>✨</span><span>⭐</span><span>🌟</span><span>⭐</span><span>✨</span></div>", unsafe_allow_html=True)
     st.markdown("<h3 style='text-align:center;color:#ff00c8;'>FIVE EXPLORERS</h3>", unsafe_allow_html=True)
     st.write("")
     buddy_widget()
@@ -1169,6 +1245,9 @@ def screen_menu():
         if st.button(f"🏅 Achievements ({len(st.session_state.achievements)}/{len(ACHIEVEMENTS)})"):
             st.session_state.screen = "achievements"
             st.rerun()
+    if st.button(f"🎖️ Badge Case ({len(st.session_state.badges)}/{len(GYM_LEADERS)})"):
+        st.session_state.screen = "badges"
+        st.rerun()
     if st.button("📊 Progress Report (for grown-ups)"):
         st.session_state.screen = "progress"
         st.rerun()
@@ -1195,13 +1274,23 @@ def screen_starter_select():
 
 def screen_battle():
     hud()
+    zone_name, _ = get_zone(st.session_state.wave)
+    zone_color = ZONE_COLORS.get(zone_name, "#00F0FF")
     hp_pct = int(100 * st.session_state.monster_hp / max(1, st.session_state.monster_max_hp))
     starter_name, starter_emoji = get_starter_display()
+
+    if st.session_state.monster_hp == st.session_state.monster_max_hp and st.session_state.current_move is None and not st.session_state.catch_pending:
+        st.markdown(f"""
+        <div style="text-align:center;font-weight:800;font-size:22px;color:{zone_color};
+            animation: popscale 0.5s ease-out;margin-bottom:8px;">
+            ⚡ A wild {st.session_state.monster_name} appeared! ⚡
+        </div>
+        """, unsafe_allow_html=True)
 
     c1, c2 = st.columns(2)
     with c1:
         st.markdown(f"""
-        <div class="monster-box">
+        <div class="monster-box" style="border:2px solid {zone_color}44;border-radius:16px;box-shadow:0 0 24px {zone_color}33;">
             <div style="font-weight:800; letter-spacing:1px;">🐾 WILD {st.session_state.monster_name.upper()}</div>
             <div class="monster-emoji">{st.session_state.monster_emoji}</div>
             <div class="hp-bar-bg"><div class="hp-bar-fill" style="width:{hp_pct}%;"></div></div>
@@ -1210,7 +1299,7 @@ def screen_battle():
         """, unsafe_allow_html=True)
     with c2:
         st.markdown(f"""
-        <div class="monster-box">
+        <div class="monster-box" style="border:2px solid {ZONE_COLORS.get(zone_name,'#00F0FF')}22;border-radius:16px;">
             <div style="font-weight:800; letter-spacing:1px;">🌟 YOUR {starter_name.upper()}</div>
             <div class="monster-emoji" style="font-size:80px;">{starter_emoji}</div>
         </div>
@@ -1225,7 +1314,12 @@ def screen_battle():
                 st.rerun()
         else:
             if st.session_state.catch_result == "caught":
-                catch = st.session_state.last_catch
+                catch = st.session_state.last_catch or {
+                    "emoji": st.session_state.monster_emoji,
+                    "name": st.session_state.monster_name,
+                    "rarity": "Common",
+                    "color": "#9aa0a6",
+                }
                 st.markdown(f"""
                 <div class="catch-banner">
                     <div style="font-size:76px;">{catch['emoji']}</div>
@@ -1233,12 +1327,13 @@ def screen_battle():
                     <div class="rarity-badge" style="background:{catch['color']}22;color:{catch['color']};border:1px solid {catch['color']};">{catch['rarity'].upper()}</div>
                 </div>
                 """, unsafe_allow_html=True)
-                if catch["rarity"] in ("Epic", "Legendary"):
+                if not st.session_state.catch_confetti_shown and catch["rarity"] in ("Epic", "Legendary"):
                     fire_confetti(["#ffd700", "#b000ff", "#ff3fa4"] if catch["rarity"] == "Legendary" else ["#b000ff", "#00f0ff"])
-                st.session_state.last_catch = None
+                    st.session_state.catch_confetti_shown = True
             else:
                 st.markdown(f"<div style='text-align:center;color:#ff9050;font-weight:800;font-size:18px;'>💨 {st.session_state.monster_name} broke free! You still keep your rewards.</div>", unsafe_allow_html=True)
             if st.button("Continue ➜"):
+                st.session_state.last_catch = None
                 build_boss_round()
                 st.session_state.screen = "boss"
                 st.rerun()
@@ -1305,7 +1400,10 @@ def screen_map():
     ensure_map()
     hud()
     zone_name, zone_emoji = get_zone(st.session_state.wave)
-    st.markdown(f"### {zone_emoji} {zone_name} — walk into the grass to find wild creatures!")
+    zone_color = ZONE_COLORS.get(zone_name, "#00F0FF")
+    grass_emoji = ZONE_TILES.get(zone_name, ZONE_TILES["Nebula Fields"])["grass"]
+    st.markdown(f"<h3 style='color:{zone_color};'>{zone_emoji} {zone_name}</h3>", unsafe_allow_html=True)
+    st.caption(f"{grass_emoji} = possible encounter · 💊 Waystation = fully restores your energy")
     starter_name, starter_emoji = get_starter_display()
 
     pr, pc = st.session_state.map_pos
@@ -1316,7 +1414,7 @@ def screen_map():
             tiles.append(starter_emoji if (r == pr and c == pc) else st.session_state.map_grid[r][c])
         rows.append("".join(tiles))
     grid_str = "<br>".join(rows)
-    st.markdown(f"<div style='text-align:center;font-size:34px;line-height:1.25;background:#15151f;border-radius:16px;padding:16px;margin-bottom:14px;'>{grid_str}</div>", unsafe_allow_html=True)
+    st.markdown(f"<div style='text-align:center;font-size:34px;line-height:1.25;background:#15151f;border:2px solid {zone_color}44;box-shadow:0 0 20px {zone_color}22;border-radius:16px;padding:16px;margin-bottom:14px;'>{grid_str}</div>", unsafe_allow_html=True)
 
     _, mid, _ = st.columns(3)
     with mid:
@@ -1352,8 +1450,10 @@ def screen_boss():
     q = st.session_state.boss_questions[idx]
     label, color = TYPE_LABELS.get(q["type"], ("QUESTION", "#fff"))
 
+    zone_name, _ = get_zone(st.session_state.wave)
+    leader = GYM_LEADERS.get(zone_name, {})
     st.markdown(f"<div class='boss-tag' style='background:{color}22;color:{color};border:1px solid {color};'>{label}</div>", unsafe_allow_html=True)
-    st.markdown(f"## 🏆 Boss Round — Question {idx + 1} of {total}")
+    st.markdown(f"## 🏆 Gym Battle vs {leader.get('leader', 'the Gym Leader')} {leader.get('leader_emoji','')} — Question {idx + 1} of {total}")
     if idx == total - 1:
         st.markdown("<div style='text-align:center;color:#ffd23f;font-weight:800;'>🏁 Last question — finish strong!</div>", unsafe_allow_html=True)
 
@@ -1393,23 +1493,21 @@ def screen_shop():
     correct = st.session_state.boss_correct
     total = len(st.session_state.boss_questions) if st.session_state.boss_questions else 5
 
-    catch = st.session_state.last_catch
-    if catch:
+    if st.session_state.new_badge:
+        b = st.session_state.new_badge
         st.markdown(f"""
         <div class="catch-banner">
-            <div style="font-size:76px;">{catch['emoji']}</div>
-            <div style="font-size:22px;font-weight:800;">You caught {catch['name']}!</div>
-            <div class="rarity-badge" style="background:{catch['color']}22;color:{catch['color']};border:1px solid {catch['color']};">{catch['rarity'].upper()}</div>
+            <div style="font-size:76px;">{b['badge_emoji']}</div>
+            <div style="font-size:22px;font-weight:800;">You earned the {b['badge_name']}!</div>
+            <div style="color:#aaa;">Defeated by {b['leader']} {b['leader_emoji']} of {b['zone']}</div>
         </div>
         """, unsafe_allow_html=True)
-        if catch["rarity"] in ("Epic", "Legendary"):
-            fire_confetti(["#ffd700", "#b000ff", "#ff3fa4"] if catch["rarity"] == "Legendary" else ["#b000ff", "#00f0ff"])
-        st.session_state.last_catch = None
+        fire_confetti(["#ffd700", "#ffffff", "#00f0ff"])
+        st.session_state.new_badge = None
+    elif correct == total and total > 0:
+        st.success("💯 Perfect Gym Battle!")
 
-    if correct == total and total > 0:
-        st.success("💯 Perfect Boss Round!")
-
-    st.markdown(f"## 🎉 Wave cleared! Boss Round: {correct}/{total} correct!")
+    st.markdown(f"## 🎉 Gym Battle result: {correct}/{total} correct!")
     st.markdown("### 🛠️ Star Depot — spend your shards!")
     for key, upg in UPGRADE_DEFS.items():
         lvl = st.session_state.upgrade_levels[key]
@@ -1620,6 +1718,27 @@ def screen_achievements():
         st.session_state.screen = "menu"
         st.rerun()
 
+def screen_badges():
+    st.markdown(f"## 🎖️ Badge Case ({len(st.session_state.badges)}/{len(GYM_LEADERS)})")
+    st.caption("Win a Gym Battle in a zone (3+ out of 5 correct) to earn its badge.")
+    for zone_name, info in GYM_LEADERS.items():
+        earned = zone_name in st.session_state.badges
+        opacity = "1" if earned else "0.35"
+        shown_emoji = info["badge_emoji"] if earned else "🔒"
+        st.markdown(f"""
+        <div class="achievement-card" style="opacity:{opacity};">
+            <div style="font-size:36px;">{shown_emoji}</div>
+            <div>
+                <div style="font-weight:800;">{info['badge_name']}</div>
+                <div style="color:#aaa;font-size:14px;">{zone_name} — {info['leader']} {info['leader_emoji']}</div>
+            </div>
+        </div>
+        """, unsafe_allow_html=True)
+    st.divider()
+    if st.button("🏠 Back to Menu"):
+        st.session_state.screen = "menu"
+        st.rerun()
+
 def screen_practice():
     st.markdown("## 🔁 Tricky Words Practice")
     st.caption("Low-pressure review — no energy lost here, just extra reps on words you've missed before. This is the single best thing for actually locking in new vocabulary.")
@@ -1705,6 +1824,7 @@ screens = {
     "read_aloud": screen_read_aloud,
     "collection": screen_collection,
     "achievements": screen_achievements,
+    "badges": screen_badges,
     "practice": screen_practice,
     "progress": screen_progress,
 }
